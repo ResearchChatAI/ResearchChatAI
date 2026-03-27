@@ -267,12 +267,104 @@ $displayFullName = $displayName . ' ' . $displaySurname;
         ResearchChatAI allows you to easily setup and conduct studies with sophisticated AI agents.
         You have full control over the AI's attributes (e.g., name, appearance) and behavior
         (i.e., via LLM instructions).
-        <br><br>
         Begin by clicking on the <b>Add study</b> button below. Afterwards, ResearchChatAI will
         guide you through the <b>5 simple steps</b> of setting up your study. Watch
         <a href="/documentation/" target="_blank">this video</a> to learn
         more about getting started with ResearchChatAI.
       </p>
+
+      <hr style="margin: 1rem 0;">
+
+      <div class="is-flex is-align-items-center is-flex-wrap-wrap is-justify-content-space-between" style="margin-bottom: 0.5rem; gap: 0.5rem;">
+        <p class="has-text-weight-semibold" style="margin: 0;">
+          <span class="icon"><i class="fas fa-quote-left"></i></span> If you use ResearchChatAI, please cite:
+        </p>
+        <div class="buttons are-small" style="margin: 0;">
+          <button class="button is-success is-light" id="copyApaBtn" onclick="copyApaCitation()">
+            <span class="icon"><i class="fas fa-copy"></i></span>
+            <span>Copy APA</span>
+          </button>
+          <button class="button is-info is-light" onclick="downloadRIS()">
+            <span class="icon"><i class="fas fa-download"></i></span>
+            <span>RIS</span>
+          </button>
+          <button class="button is-info is-light" onclick="downloadBibTeX()">
+            <span class="icon"><i class="fas fa-download"></i></span>
+            <span>BibTeX</span>
+          </button>
+        </div>
+      </div>
+      <p id="apaCitation" style="font-size: 0.92rem; line-height: 1.5; padding: 0.75rem; background: rgba(255,255,255,0.6); border-radius: 6px; border-left: 3px solid #48c78e;">
+        Becker, Marc, David de Jong, Roman Briker, Kars Mennens, Jonas Heller, Dominik Mahr, &amp; Dhruv Grewal (2026). Using customized, conversational AI agents in leadership and management research: Benefits, practical illustrations, and best practices. <i>The Leadership Quarterly</i>, <i>37</i>(3), 101952. <a href="https://doi.org/10.1016/j.leaqua.2026.101952" target="_blank">https://doi.org/10.1016/j.leaqua.2026.101952</a>
+      </p>
+
+      <script>
+      function copyApaCitation() {
+        var text = 'Becker, M., de Jong, D., Briker, R., Mennens, K., Heller, J., Mahr, D., & Grewal, D. (2026). Using customized, conversational AI agents in leadership and management research: Benefits, practical illustrations, and best practices. The Leadership Quarterly, 37(3), 101952. https://doi.org/10.1016/j.leaqua.2026.101952';
+        navigator.clipboard.writeText(text).then(function() {
+          var btn = document.getElementById('copyApaBtn');
+          var origHTML = btn.innerHTML;
+          btn.innerHTML = '<span class="icon"><i class="fas fa-check"></i></span><span>Copied!</span>';
+          btn.classList.remove('is-success');
+          btn.classList.add('is-primary');
+          setTimeout(function() { btn.innerHTML = origHTML; btn.classList.remove('is-primary'); btn.classList.add('is-success'); }, 2000);
+        });
+      }
+
+      function downloadRIS() {
+        var ris = "TY  - JOUR\n" +
+          "T1  - Using customized, conversational AI agents in leadership and management research: Benefits, practical illustrations, and best practices\n" +
+          "AU  - Becker, Marc\n" +
+          "AU  - de Jong, David\n" +
+          "AU  - Briker, Roman\n" +
+          "AU  - Mennens, Kars\n" +
+          "AU  - Heller, Jonas\n" +
+          "AU  - Mahr, Dominik\n" +
+          "AU  - Grewal, Dhruv\n" +
+          "JO  - The Leadership Quarterly\n" +
+          "VL  - 37\n" +
+          "IS  - 3\n" +
+          "SP  - 101952\n" +
+          "PY  - 2026\n" +
+          "DA  - 2026/07/01/\n" +
+          "SN  - 1048-9843\n" +
+          "DO  - https://doi.org/10.1016/j.leaqua.2026.101952\n" +
+          "UR  - https://www.sciencedirect.com/science/article/pii/S1048984326000111\n" +
+          "KW  - Artificial Intelligence\n" +
+          "KW  - AI\n" +
+          "KW  - Tool\n" +
+          "KW  - Conversational AI\n" +
+          "KW  - Generative AI\n" +
+          "ER  - \n";
+        downloadFile(ris, 'Becker_et_al_2026_ResearchChatAI.ris', 'application/x-research-info-systems');
+      }
+
+      function downloadBibTeX() {
+        var bib = "@article{becker2026researchChatAI,\n" +
+          "  title     = {Using customized, conversational {AI} agents in leadership and management research: Benefits, practical illustrations, and best practices},\n" +
+          "  author    = {Becker, Marc and de Jong, David and Briker, Roman and Mennens, Kars and Heller, Jonas and Mahr, Dominik and Grewal, Dhruv},\n" +
+          "  journal   = {The Leadership Quarterly},\n" +
+          "  volume    = {37},\n" +
+          "  number    = {3},\n" +
+          "  pages     = {101952},\n" +
+          "  year      = {2026},\n" +
+          "  doi       = {10.1016/j.leaqua.2026.101952},\n" +
+          "  issn      = {1048-9843}\n" +
+          "}\n";
+        downloadFile(bib, 'Becker_et_al_2026_ResearchChatAI.bib', 'application/x-bibtex');
+      }
+
+      function downloadFile(content, filename, mimeType) {
+        var blob = new Blob([content], { type: mimeType });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+      }
+      </script>
     </section>
 
     <!-- Model Warning Section -->
