@@ -133,6 +133,7 @@ if (!empty($study['isEncrypted'])) {
     $study['openaiApiKey']          = decryptString($study['openaiApiKey'] ?? '');
     $study['openrouterApiKey']      = decryptString($study['openrouterApiKey'] ?? '');
     $study['openaiReasoningEffort'] = decryptString($study['openaiReasoningEffort'] ?? '');
+    $study['customConnectorConfiguration'] = decryptString($study['customConnectorConfiguration'] ?? '');
     $publicKey = $database->get('users', 'publicKey', ['userID' => $study['studyOwner']]);
 }
 
