@@ -1,0 +1,65 @@
+{
+  "name": "Google Gemini — Streaming",
+  "description": "Connect to Google Gemini via its OpenAI-compatible endpoint with streaming. Tokens appear in real-time.",
+  "requiresStreaming": true,
+  "fields": [
+    {
+      "key": "api_key",
+      "label": "Gemini API Key",
+      "type": "text",
+      "placeholder": "your-gemini-api-key",
+      "inputType": "password"
+    },
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "select",
+      "options": [
+        { "value": "gemini-3-flash-preview", "label": "Gemini 3 Flash" },
+        { "value": "gemini-3.1-pro-preview", "label": "Gemini 3.1 Pro" },
+        { "value": "gemini-3.1-flash-lite-preview", "label": "Gemini 3.1 Flash Lite" },
+        { "value": "gemini-2.5-flash", "label": "Gemini 2.5 Flash" },
+        { "value": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash Lite" },
+        { "value": "gemini-2.5-pro", "label": "Gemini 2.5 Pro" }
+      ],
+      "default": "gemini-3-flash-preview"
+    }
+  ],
+  "connector": {
+    "version": "1",
+    "request": {
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "method": "POST",
+      "auth": {
+        "type": "bearer",
+        "token": "{{api_key}}"
+      },
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream"
+      },
+      "timeoutMs": 30000,
+      "stream": true
+    },
+    "aiPayload": {
+      "model": "{{model}}",
+      "temperature": 0.7,
+      "max_tokens": 1024,
+      "stream": true
+    },
+    "history": {
+      "mode": "array",
+      "extractSystem": false
+    },
+    "response": {
+      "resultPath": "$.choices[0].message.content",
+      "stream": {
+        "linePrefix": "data:",
+        "doneSignal": "[DONE]",
+        "extractors": [
+          { "tokenPath": "$.choices[0].delta.content" }
+        ]
+      }
+    }
+  }
+}

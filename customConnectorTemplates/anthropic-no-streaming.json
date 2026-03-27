@@ -1,0 +1,55 @@
+{
+  "name": "Anthropic Claude — No Streaming",
+  "description": "Connect directly to the Anthropic API without streaming. The full response is returned at once.",
+  "requiresStreaming": false,
+  "fields": [
+    {
+      "key": "api_key",
+      "label": "Anthropic API Key",
+      "type": "text",
+      "placeholder": "sk-ant-api03-...",
+      "inputType": "password"
+    },
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "select",
+      "options": [
+        { "value": "claude-opus-4-20250514", "label": "Claude Opus 4" },
+        { "value": "claude-sonnet-4-20250514", "label": "Claude Sonnet 4" },
+        { "value": "claude-haiku-3-5-20241022", "label": "Claude 3.5 Haiku" }
+      ],
+      "default": "claude-sonnet-4-20250514"
+    }
+  ],
+  "connector": {
+    "version": "1",
+    "request": {
+      "url": "https://api.anthropic.com/v1/messages",
+      "method": "POST",
+      "auth": {
+        "type": "custom",
+        "header": "x-api-key",
+        "value": "{{api_key}}"
+      },
+      "headers": {
+        "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01"
+      },
+      "timeoutMs": 30000
+    },
+    "aiPayload": {
+      "model": "{{model}}",
+      "system": "{{systemPrompt}}",
+      "max_tokens": 1024
+    },
+    "history": {
+      "mode": "array",
+      "extractSystem": true,
+      "systemParam": "system"
+    },
+    "response": {
+      "resultPath": "$.content[0].text"
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "name": "Mistral — No Streaming",
+  "description": "Connect directly to the Mistral API without streaming. The full response is returned at once.",
+  "requiresStreaming": false,
+  "fields": [
+    {
+      "key": "api_key",
+      "label": "Mistral API Key",
+      "type": "text",
+      "placeholder": "your-mistral-api-key",
+      "inputType": "password"
+    },
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "select",
+      "options": [
+        { "value": "mistral-small-latest", "label": "Mistral Small" },
+        { "value": "mistral-medium-latest", "label": "Mistral Medium" },
+        { "value": "mistral-large-latest", "label": "Mistral Large" }
+      ],
+      "default": "mistral-small-latest"
+    }
+  ],
+  "connector": {
+    "version": "1",
+    "request": {
+      "url": "https://api.mistral.ai/v1/chat/completions",
+      "method": "POST",
+      "auth": {
+        "type": "bearer",
+        "token": "{{api_key}}"
+      },
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "timeoutMs": 30000
+    },
+    "aiPayload": {
+      "model": "{{model}}",
+      "temperature": 0.7,
+      "max_tokens": 1024
+    },
+    "history": {
+      "mode": "array",
+      "extractSystem": false
+    },
+    "response": {
+      "resultPath": "$.choices[0].message.content"
+    }
+  }
+}

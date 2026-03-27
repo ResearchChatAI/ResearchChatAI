@@ -328,9 +328,11 @@ error_log("WRITE RESULT: " . (file_exists($configFile) ? 'FILE CREATED' : 'FILE 
  * ================================================================== */
 
 echo json_encode([
-    'mode'          => $streamFlag ? 'stream' : 'request',
-    'requestToken'  => $token,
-    'studyID'       => $study['studyID'],
-    'resultPath'    => $connector['response']['resultPath'] ?? null,
-    'reasoningPath' => $connector['response']['reasoningPath'] ?? null,
+    'mode'                => $streamFlag ? 'stream' : 'request',
+    'requestToken'        => $token,
+    'studyID'             => $study['studyID'],
+    'resultPath'          => $connector['response']['resultPath'] ?? null,
+    'reasoningPath'       => $connector['response']['reasoningPath'] ?? null,
+    'extractors'          => $connector['response']['stream']['extractors'] ?? null,
+    'reasoningExtractors' => $connector['response']['stream']['reasoningExtractors'] ?? null,
 ]);

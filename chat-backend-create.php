@@ -142,7 +142,8 @@ if (!empty($study['isEncrypted'])) {
     'openaiHideReasoning',
     'aiDelay',
     'aiDelayIsPerCharacter',
-    'aiDelayBeforeFirstMessage'
+    'aiDelayBeforeFirstMessage',
+    'customConnectorConfiguration'
   ];
   
   foreach ($decryptFields as $field) {
@@ -1428,6 +1429,102 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
             class="followUpContainer mt-3 mb-5"
             <?php echo ($study["modelProvider"] != "custom") ? "style='display:none;'" : ""; ?>>
 
+            <!-- Explanation -->
+            <div class="content mb-4">
+              <p>
+                Custom connectors let you connect to almost any AI model API, giving you
+                even more flexibility than accessing models through OpenRouter. While we do
+                not actively maintain these configurations and they may break at any point,
+                we provide some popular templates below for easy setup. You can also write
+                your own connector JSON from scratch at any time.
+              </p>
+            </div>
+
+            <!-- Quick-start templates -->
+            <div class="field mb-5">
+              <label class="label has-text-left">Quick-start templates</label>
+
+              <label class="label has-text-left" style="font-size:0.85rem;font-style:italic;">Anthropic Claude</label>
+              <div class="table-container">
+                <table class="table is-fullwidth is-hoverable" style="max-width:650px;">
+                  <tbody>
+                    <tr>
+                      <td>No Streaming</td>
+                      <td class="has-text-right" style="width:100px;">
+                        <button class="button is-small is-info is-outlined js-choose-connector-tpl"
+                          data-template="anthropic-no-streaming.json">Choose</button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>Streaming</td>
+                      <td class="has-text-right" style="width:100px;">
+                        <button class="button is-small is-info is-outlined js-choose-connector-tpl"
+                          data-template="anthropic-streaming.json">Choose</button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>Streaming + Extended Thinking</td>
+                      <td class="has-text-right" style="width:100px;">
+                        <button class="button is-small is-info is-outlined js-choose-connector-tpl"
+                          data-template="anthropic-streaming-thinking.json">Choose</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <label class="label has-text-left" style="font-size:0.85rem;font-style:italic;">Mistral</label>
+              <div class="table-container">
+                <table class="table is-fullwidth is-hoverable" style="max-width:650px;">
+                  <tbody>
+                    <tr>
+                      <td>No Streaming</td>
+                      <td class="has-text-right" style="width:100px;">
+                        <button class="button is-small is-info is-outlined js-choose-connector-tpl"
+                          data-template="mistral-no-streaming.json">Choose</button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>Streaming</td>
+                      <td class="has-text-right" style="width:100px;">
+                        <button class="button is-small is-info is-outlined js-choose-connector-tpl"
+                          data-template="mistral-streaming.json">Choose</button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>Streaming + Reasoning</td>
+                      <td class="has-text-right" style="width:100px;">
+                        <button class="button is-small is-info is-outlined js-choose-connector-tpl"
+                          data-template="mistral-streaming-reasoning.json">Choose</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <label class="label has-text-left" style="font-size:0.85rem;font-style:italic;">Google Gemini</label>
+              <div class="table-container">
+                <table class="table is-fullwidth is-hoverable" style="max-width:650px;">
+                  <tbody>
+                    <tr>
+                      <td>No Streaming</td>
+                      <td class="has-text-right" style="width:100px;">
+                        <button class="button is-small is-info is-outlined js-choose-connector-tpl"
+                          data-template="gemini-no-streaming.json">Choose</button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>Streaming</td>
+                      <td class="has-text-right" style="width:100px;">
+                        <button class="button is-small is-info is-outlined js-choose-connector-tpl"
+                          data-template="gemini-streaming.json">Choose</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <!-- Connector JSON -->
             <div class="field mt-5">
               <label class="label has-text-left" id="customConfigLabel">Connector&nbsp;JSON</label>
@@ -1456,6 +1553,17 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
                     (still requires further specification in the connector JSON)
                   </span>
                 </label>
+              </div>
+            </div>
+
+            <!-- Hide reasoning traces -->
+            <div class="field mt-4">
+              <div class="field mt-3">
+                <label class="checkbox">
+                  <input type="checkbox" class="trackChanges" fieldKey="customConnectorHideReasoning" saveIndicatorElement="#customConfigLabel" <?php echo ($study["customConnectorHideReasoning"] == 1) ? "checked" : ""; ?> />
+                  Hide reasoning in chat
+                </label>
+                <p class="help">Note: When enabled, any available reasoning section will be hidden from participants in the chat UI.</p>
               </div>
             </div>
           </div>
@@ -2486,6 +2594,32 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
     </div>
   </div>
   <!-- Delete Condition Modal END-->
+
+  <!-- Connector Template Wizard Modal START -->
+  <div class="modal" id="connectorWizardModal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title" id="connectorWizardTitle">Configure Template</p>
+        <button class="delete" aria-label="close"></button>
+      </header>
+      <section class="modal-card-body">
+        <p class="mb-4" id="connectorWizardDescription"></p>
+        <p class="mb-4 has-text-grey">
+          The values you enter below will be prefilled into the connector JSON for you.
+          You can still make changes to the JSON directly afterwards.
+        </p>
+        <div id="connectorWizardFields"></div>
+      </section>
+      <footer class="modal-card-foot">
+        <div class="buttons">
+          <button class="button is-success" id="connectorWizardApply">Apply template</button>
+          <button class="button cancel">Cancel</button>
+        </div>
+      </footer>
+    </div>
+  </div>
+  <!-- Connector Template Wizard Modal END -->
 
   <!--Preview modal START-->
   <div class="modal" id="previewModal">
@@ -4432,6 +4566,106 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
           "#6c5ce7",
           "#a29bfe"
         ]
+      });
+
+      // =================================================================
+      // Custom Connector Template Wizard
+      // =================================================================
+
+      var activeTemplate = null;
+
+      // "Choose" button — fetch template JSON, build wizard, open modal
+      $('.js-choose-connector-tpl').on('click', function() {
+        var filename = $(this).data('template');
+        var $btn = $(this);
+        $btn.addClass('is-loading');
+
+        $.getJSON('customConnectorTemplates/' + filename)
+          .done(function(tpl) {
+            activeTemplate = tpl;
+
+            $('#connectorWizardTitle').text(tpl.name);
+            $('#connectorWizardDescription').text(tpl.description || '');
+
+            // Build form fields
+            var $container = $('#connectorWizardFields').empty();
+            (tpl.fields || []).forEach(function(field) {
+              var $field = $('<div class="field mb-4"></div>');
+              $field.append('<label class="label has-text-left">' +
+                $('<span>').text(field.label).html() + '</label>');
+
+              if (field.type === 'select') {
+                var $select = $('<select class="input" data-field-key="' + field.key + '"></select>');
+                (field.options || []).forEach(function(opt) {
+                  var $opt = $('<option></option>').val(opt.value).text(opt.label);
+                  if (opt.value === field['default']) $opt.attr('selected', true);
+                  $select.append($opt);
+                });
+                $field.append($('<div class="control"></div>').append(
+                  $('<div class="select is-fullwidth"></div>').append($select)
+                ));
+              } else {
+                var $input = $('<input class="input" data-field-key="' + field.key + '">')
+                  .attr('type', field.inputType || 'text')
+                  .attr('placeholder', field.placeholder || '');
+                if (field['default']) $input.val(field['default']);
+                $field.append($('<div class="control"></div>').append($input));
+              }
+              $container.append($field);
+            });
+
+            openModal(document.getElementById('connectorWizardModal'));
+          })
+          .fail(function() {
+            alert('Failed to load template. Please try again.');
+          })
+          .always(function() {
+            $btn.removeClass('is-loading');
+          });
+      });
+
+      // "Apply template" handler
+      $('#connectorWizardApply').on('click', function() {
+        if (!activeTemplate) return;
+
+        // Collect field values
+        var values = {};
+        var missing = [];
+        $('#connectorWizardFields [data-field-key]').each(function() {
+          var key = $(this).data('field-key');
+          var val = $(this).val();
+          if (!val && $(this).is('input')) missing.push(key);
+          values[key] = val;
+        });
+        if (missing.length) {
+          alert('Please fill in all fields before applying.');
+          return;
+        }
+
+        // Replace {{placeholders}} in the connector JSON
+        var json = JSON.stringify(activeTemplate.connector);
+        Object.keys(values).forEach(function(key) {
+          // Handle {{key:int}} for numeric values (unquoted)
+          json = json.split('"{{' + key + ':int}}"').join(values[key]);
+          json = json.split('{{' + key + '}}').join(values[key]);
+        });
+
+        // Pretty-print and fill into textarea
+        try {
+          json = JSON.stringify(JSON.parse(json), null, 2);
+        } catch(e) { /* use as-is if parse fails */ }
+
+        $('#customConfigInput').val(json).trigger('change');
+
+        // Auto-toggle streaming checkbox
+        var $streamCb = $('input[fieldKey="customConnectorEnableStreaming"]');
+        if (activeTemplate.requiresStreaming && !$streamCb.is(':checked')) {
+          $streamCb.prop('checked', true).trigger('change');
+        } else if (!activeTemplate.requiresStreaming && $streamCb.is(':checked')) {
+          $streamCb.prop('checked', false).trigger('change');
+        }
+
+        closeAllModals();
       });
 
     });

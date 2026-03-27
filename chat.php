@@ -860,8 +860,9 @@ if ($study['dataCollectionActive'] == 0) {
                             echo json_encode($modelName);
                             ?>;
         var OPENAI_HIDE_REASONING = parseInt(<?php echo getStudyValue("openaiHideReasoning", 0); ?>) || 0;
+        var CUSTOM_HIDE_REASONING = parseInt(<?php echo json_encode($study["customConnectorHideReasoning"] ?? 0); ?>) || 0;
         // If false, no reasoning UI appears at all (no chevron, no block).
-        window.REASONING_VISIBLE = /^gpt-5/i.test(String(MODEL_NAME || "")) && (OPENAI_HIDE_REASONING !== 1);
+        window.REASONING_VISIBLE = (/^gpt-5/i.test(String(MODEL_NAME || "")) && (OPENAI_HIDE_REASONING !== 1)) || (MODEL_PROVIDER === "custom" && CUSTOM_HIDE_REASONING !== 1);
         // If true, each reasoning block starts expanded; if false, collapsed.
         window.REASONING_DEFAULT_OPEN = false;
 
@@ -1594,6 +1595,18 @@ if ($study['dataCollectionActive'] == 0) {
                 return cur;
             }
 
+            /* Check whether a parsed SSE object matches an extractor filter.
+               Filter keys are JSONPath-lite strings (e.g. "$.type", "$.delta.type").
+               Returns true if ALL filter entries match (or if filter is empty/null). */
+            function _matchExtractorFilter(obj, filter) {
+                if (!filter || typeof filter !== 'object') return true;
+                for (const key in filter) {
+                    if (!filter.hasOwnProperty(key)) continue;
+                    if (_extractPath(obj, key) !== filter[key]) return false;
+                }
+                return true;
+            }
+
             /* Flatten a reasoning summary that may be a string or array of parts */
             function _flattenReasoning(val) {
                 if (typeof val === 'string') return val;
@@ -1630,6 +1643,8 @@ if ($study['dataCollectionActive'] == 0) {
                 var baseDelayStream = Math.max(0, pickDelay(aiDelay));
                 var releaseAt = Date.now() + baseDelayStream;
                 var holdBuffer = '';
+                var reasoningExtractors = null;
+                var contentExtractors = null;
 
                 setTimeout(function() {
                     // Step 1: Call prepareChat.php → get one-time stream token
@@ -1642,6 +1657,8 @@ if ($study['dataCollectionActive'] == 0) {
                         })
                         .then(function(prepData) {
                             if (prepData.error) throw new Error(prepData.error);
+                            reasoningExtractors = prepData.reasoningExtractors || null;
+                            contentExtractors = prepData.extractors || null;
 
                             // Step 2: Stream via Node proxy using the one-time token
                             return fetch(baseURL + 'Backend/Chat/stream', {
@@ -1860,6 +1877,20 @@ if ($study['dataCollectionActive'] == 0) {
                                                     return;
                                                 }
 
+                                                /* ---- Generic reasoning extractor fallback (custom connectors) ---- */
+                                                if (reasoningExtractors && Array.isArray(reasoningExtractors)) {
+                                                    for (const ext of reasoningExtractors) {
+                                                        if (_matchExtractorFilter(obj, ext.filter)) {
+                                                            const token = ext.tokenPath ? _extractPath(obj, ext.tokenPath) : null;
+                                                            if (typeof token === 'string' && token) {
+                                                                ensureReasoningContainer(thisMsgId);
+                                                                updateReasoningText(thisMsgId, token);
+                                                            }
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+
                                                 continue;
                                             }
 
@@ -1874,8 +1905,43 @@ if ($study['dataCollectionActive'] == 0) {
                                                     assistantText += d.content;
                                                     $assistantBubble.find('.text').text(assistantText);
                                                 }
+                                                /* Array-typed content chunks: [{type:"text",text:"..."}, {type:"thinking",...}] */
+                                                if (Array.isArray(d.content)) {
+                                                    for (const chunk of d.content) {
+                                                        if (chunk.type === 'text' && typeof chunk.text === 'string') {
+                                                            if (!$assistantBubble.is(':visible')) {
+                                                                $assistantBubble.show();
+                                                                $('#typing-dots').hide();
+                                                            }
+                                                            assistantText += chunk.text;
+                                                            $assistantBubble.find('.text').text(assistantText);
+                                                        }
+                                                        if (chunk.type === 'thinking') {
+                                                            /* Nested: {type:"thinking", thinking:[{type:"text", text:"..."}]} */
+                                                            if (Array.isArray(chunk.thinking)) {
+                                                                for (const t of chunk.thinking) {
+                                                                    if (typeof t.text === 'string' && t.text) {
+                                                                        ensureReasoningContainer(thisMsgId);
+                                                                        updateReasoningText(thisMsgId, t.text);
+                                                                    }
+                                                                }
+                                                            }
+                                                            /* Flat: {type:"thinking", text:"..."} */
+                                                            if (typeof chunk.text === 'string' && chunk.text) {
+                                                                ensureReasoningContainer(thisMsgId);
+                                                                updateReasoningText(thisMsgId, chunk.text);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                /* Reasoning fields (various provider conventions) */
                                                 if (typeof d.reasoning === 'string' && d.reasoning.trim() !== '') {
-                                                    reasoningAgg += (reasoningAgg ? '\n' : '') + d.reasoning;
+                                                    ensureReasoningContainer(thisMsgId);
+                                                    updateReasoningText(thisMsgId, d.reasoning);
+                                                }
+                                                if (typeof d.reasoning_content === 'string' && d.reasoning_content.trim() !== '') {
+                                                    ensureReasoningContainer(thisMsgId);
+                                                    updateReasoningText(thisMsgId, d.reasoning_content);
                                                 }
                                                 continue;
                                             }
