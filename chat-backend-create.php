@@ -305,7 +305,19 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
     }
 
     .statusCheckContainer.error .is-success,
-    .statusCheckContainer.error .is-warning {
+    .statusCheckContainer.error .is-warning,
+    .statusCheckContainer.error .is-info {
+      display: none;
+    }
+
+    .statusCheckContainer.info .is-success,
+    .statusCheckContainer.info .is-warning,
+    .statusCheckContainer.info .is-danger {
+      display: none;
+    }
+
+    .statusCheckContainer.ok .is-info,
+    .statusCheckContainer.warning .is-info {
       display: none;
     }
   </style>
@@ -2203,6 +2215,12 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               </span>
               <span>No API key provided; impossible to send messages to the AI</span>
             </div>
+            <div class="notification mb-2 p-2 is-light is-info">
+              <span class="icon mr-2">
+                <i class="fa fa-info-circle"></i>
+              </span>
+              <span>Custom connector selected; connection cannot be automatically verified. Please ensure your connector endpoint is working correctly.</span>
+            </div>
           </div>
 
           <label class="label has-text-left mt-5">Step 4: Participant settings</label>
@@ -4056,29 +4074,32 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
       // API KEY VALIDATION
       // -----------------------------------------------------------------------
       
-      // Check whether openRouterModelProviderRadioButton has class .active
-      if ($('#openRouterModelProviderRadioButton').hasClass('active')) {
+      // Check whether custom connector is selected
+      if ($('#customModelProviderRadioButton').hasClass('active')) {
+        // Custom connector cannot be automatically verified
+        $("#llmSettingsStatusCheck").removeClass("ok").removeClass("warning").removeClass("error").addClass("info");
+      } else if ($('#openRouterModelProviderRadioButton').hasClass('active')) {
         // Check whether openRouterApiKeyInput is empty
         if ($('#openRouterApiKeyInput').val() === '') {
-          $("#llmSettingsStatusCheck").removeClass("ok").removeClass("warning").addClass("error");
+          $("#llmSettingsStatusCheck").removeClass("ok").removeClass("warning").removeClass("info").addClass("error");
         } else {
           // Check whether the openRouterApiKeyInput begins with "sk-"
           if ($('#openRouterApiKeyInput').val().startsWith('sk-')) {
-            $("#llmSettingsStatusCheck").removeClass("warning").removeClass("error").addClass("ok");
+            $("#llmSettingsStatusCheck").removeClass("warning").removeClass("error").removeClass("info").addClass("ok");
           } else {
-            $("#llmSettingsStatusCheck").removeClass("ok").removeClass("error").addClass("warning");
+            $("#llmSettingsStatusCheck").removeClass("ok").removeClass("error").removeClass("info").addClass("warning");
           }
         }
       } else {
         // Check whether openAiApiKeyInput  is empty
         if ($('#openAiApiKeyInput').val() === '') {
-          $("#llmSettingsStatusCheck").removeClass("ok").removeClass("warning").addClass("error");
+          $("#llmSettingsStatusCheck").removeClass("ok").removeClass("warning").removeClass("info").addClass("error");
         } else {
           // Check whether the openAiApiKeyInput begins with "sk-" and has a length of 16 characters
           if ($('#openAiApiKeyInput').val().startsWith('sk-')) {
-            $("#llmSettingsStatusCheck").removeClass("warning").removeClass("error").addClass("ok");
+            $("#llmSettingsStatusCheck").removeClass("warning").removeClass("error").removeClass("info").addClass("ok");
           } else {
-            $("#llmSettingsStatusCheck").removeClass("ok").removeClass("error").addClass("warning");
+            $("#llmSettingsStatusCheck").removeClass("ok").removeClass("error").removeClass("info").addClass("warning");
           }
         }
       }
