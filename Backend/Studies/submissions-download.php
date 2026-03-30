@@ -80,7 +80,8 @@ define('CSV_COLUMNS', [
     'startTime',
     'duration',
     'numberMessages',
-    'passedVariables'
+    'passedVariables',
+    'encryptionType'
 ]);
 
 // =============================================================================
@@ -316,11 +317,33 @@ if (!$study) {
 // Validate and get CSV delimiter
 $delimiter = validateDelimiter($_GET['sep'] ?? null);
 
+// Check for JSON format (used by client-side decryption CSV download)
+$format = $_GET['format'] ?? 'csv';
+
+if ($format === 'json') {
+    // Return raw JSON rows (ciphertext for encrypted, plaintext for unencrypted)
+    header('Content-Type: application/json; charset=utf-8');
+
+    try {
+        $rows = $database->select('submissions', CSV_COLUMNS, [
+            'studyID' => $study['studyID'],
+            'ORDER' => ['submissionTime' => 'ASC']
+        ]);
+
+        echo json_encode($rows ?: [], JSON_UNESCAPED_UNICODE);
+    } catch (Exception $e) {
+        error_log("Error fetching submissions JSON: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to fetch submissions']);
+    }
+    exit;
+}
+
 // Validate HTML stripping option
 $stripHtml = filter_input(INPUT_GET, 'stripHtml', FILTER_VALIDATE_BOOLEAN) ?: false;
 
-// Get private key for decryption (if available)
-$privateKey = $_SESSION['privateKey'] ?? null;
+// Decryption now happens client-side; pass null so no server-side decryption occurs
+$privateKey = null;
 
 // Generate safe filename
 $filename = generateCsvFilename($studyCode);
@@ -330,7 +353,7 @@ header('Access-Control-Allow-Origin: *');
 header('Content-Type: text/csv; charset=utf-8');
 header("Content-Disposition: attachment; filename=\"$filename\"");
 
-// Stream CSV data
+// Stream CSV data (no server-side decryption)
 streamCsvData($database, $study, $delimiter, $stripHtml, $privateKey);
 
 exit;

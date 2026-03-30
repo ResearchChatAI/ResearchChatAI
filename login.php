@@ -40,7 +40,7 @@ header("Permissions-Policy: geolocation=(), microphone=(), camera=()");
 
 // Content Security Policy - prevent XSS and injection attacks
 // Note: Adjusted to allow inline scripts for form validation
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://code.jquery.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://code.jquery.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 
 // Force HTTPS in production (uncomment when using HTTPS)
 // header("Strict-Transport-Security: max-age=31536000; includeSubDomains; preload");
@@ -78,8 +78,17 @@ if (isset($_GET['registered']) && $_GET['registered'] === '1') {
 // =============================================================================
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Detect AJAX request (client-side key derivation flow)
+    $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+              && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+
     // CSRF token validation
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => 'Invalid request']);
+            exit;
+        }
         $errorCode = "INVALID";
         error_log("CSRF token validation failed");
     } else {
@@ -89,8 +98,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Basic validation
         if (empty($email) || empty($password)) {
+            if ($isAjax) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'error' => 'Invalid email or password']);
+                exit;
+            }
             $errorCode = "INVALID";
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            if ($isAjax) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'error' => 'Invalid email or password']);
+                exit;
+            }
             $errorCode = "INVALID";
             $placeholderEmail = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
         } else {
@@ -106,22 +125,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Set session variables
                 $_SESSION['pm_loggedin'] = true;
                 $_SESSION['userID'] = $authResult['userID'];
-                $_SESSION['privateKey'] = $authResult['privateKey'];
                 $_SESSION['userSession'] = generateSecureToken(SESSION_KEY_LENGTH);
 
-                // Redirect to protected homepage
+
+                if ($isAjax) {
+                    // Return encrypted key blob for client-side derivation
+                    header('Content-Type: application/json');
+                    echo json_encode([
+                        'success' => true,
+                        'privateKeyEnc' => $authResult['privateKeyEnc'],
+                        'keySalt' => $authResult['keySalt']
+                    ]);
+                    exit;
+                }
+
+                // Fallback: standard redirect for non-JS clients
                 $hostname = $_SERVER['HTTP_HOST'];
                 $path = dirname($_SERVER['PHP_SELF']);
-                
-                // Detect if HTTPS is being used
-                $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') 
+
+                $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
                            || $_SERVER['SERVER_PORT'] == 443
                            || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-                
+
                 $protocol = $isHttps ? 'https://' : 'http://';
                 $redirectUrl = $protocol . $hostname . ($path === '/' ? '' : $path) . '/index.php';
 
-                // Send proper redirect headers
                 if ($_SERVER['SERVER_PROTOCOL'] === 'HTTP/1.1') {
                     if (php_sapi_name() === 'cgi') {
                         header('Status: 303 See Other');
@@ -133,6 +161,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: ' . $redirectUrl);
                 exit;
             } else {
+                if ($isAjax) {
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => false, 'error' => 'Invalid email or password']);
+                    exit;
+                }
                 // Generic error message to prevent user enumeration
                 $errorCode = "INVALID";
             }
@@ -160,7 +193,8 @@ function authenticateUser($database, $email, $password)
     $result = [
         'success' => false,
         'userID' => null,
-        'privateKey' => null
+        'privateKeyEnc' => null,
+        'keySalt' => null
     ];
 
     // Retrieve user from database
@@ -184,8 +218,8 @@ function authenticateUser($database, $email, $password)
         $isValidPassword = true;
     }
     // Check for legacy MD5 hash and upgrade if matched
-    elseif (strlen($storedPasswordHash) === MD5_HASH_LENGTH && 
-            ctype_xdigit($storedPasswordHash) && 
+    elseif (strlen($storedPasswordHash) === MD5_HASH_LENGTH &&
+            ctype_xdigit($storedPasswordHash) &&
             hash_equals(md5($password), $storedPasswordHash)) {
         $isValidPassword = true;
         $shouldUpgradePassword = true;
@@ -205,17 +239,12 @@ function authenticateUser($database, $email, $password)
         );
     }
 
-    // Validate encryption keys for modern accounts
-    $privateKey = validateEncryptionKeys($user, $password);
-    
-    // privateKey will be null for legacy accounts (acceptable) or false for invalid keys
-    if ($privateKey === false) {
-        return $result;
-    }
-
+    // Private key derivation now happens client-side.
+    // Return the encrypted blob + salt so the browser can decrypt.
     $result['success'] = true;
     $result['userID'] = $user['userID'];
-    $result['privateKey'] = $privateKey;
+    $result['privateKeyEnc'] = $user['privateKeyEnc'] ?? null;
+    $result['keySalt'] = $user['keySalt'] ?? null;
 
     return $result;
 }
@@ -399,22 +428,117 @@ function generateSecureToken($length)
 
     <!-- Scripts -->
     <script src="https://code.jquery.com/jquery-3.6.3.min.js"
-        integrity="sha256-pvPw+upLPUjgMXY0G+8O0xUf+/Im1MZjXxxgOcBQBXU=" 
+        integrity="sha256-pvPw+upLPUjgMXY0G+8O0xUf+/Im1MZjXxxgOcBQBXU="
         crossorigin="anonymous"></script>
+    <!-- libsodium-sumo for client-side key derivation (sumo needed for crypto_pwhash/Argon2id) -->
+    <script src="https://cdn.jsdelivr.net/npm/libsodium-sumo@0.7.15/dist/modules-sumo/libsodium-sumo.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers-sumo@0.7.15/dist/modules-sumo/libsodium-wrappers.js"></script>
     <script type="text/javascript">
         /**
-         * Client-side form validation
-         * Ensures both email and password fields are filled before submission
+         * AJAX login with client-side private key derivation.
+         *
+         * 1. POST credentials to server (validates password, returns encrypted key blob)
+         * 2. Derive encryption key from password using Argon2id (identical params to PHP)
+         * 3. Decrypt private key PEM using sodium secretbox
+         * 4. Store decrypted private key in sessionStorage (cleared on tab close)
+         * 5. Redirect to index.php
          */
         $('#loginForm').on('submit', function(event) {
+            event.preventDefault();
+
             var email = $('#email').val().trim();
-            var password = $('#password').val().trim();
+            var password = $('#password').val();
 
             if (!email || !password) {
-                event.preventDefault();
                 return false;
             }
+
+            // Disable submit button and show loading state
+            var submitBtn = $(this).find('input[type="submit"]');
+            submitBtn.prop('disabled', true).val('Logging in...');
+
+            $.ajax({
+                type: 'POST',
+                url: '',
+                data: $(this).serialize(),
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                dataType: 'json',
+                success: async function(response) {
+                    if (!response.success) {
+                        showLoginError();
+                        submitBtn.prop('disabled', false).val('Log in');
+                        return;
+                    }
+
+                    // If user has encryption keys, derive private key client-side
+                    if (response.privateKeyEnc && response.keySalt) {
+                        try {
+                            var _sodium = await sodium.ready;
+
+                            // Debug: check what ready returns
+                            console.log('sodium.ready resolved to:', typeof _sodium, _sodium ? Object.keys(_sodium).slice(0,10) : 'null');
+                            // Use whichever has the crypto functions
+                            var s = (_sodium && _sodium.crypto_secretbox_open) ? _sodium : sodium;
+
+                            // Decode base64 salt
+                            var keySalt = s.from_base64(response.keySalt, s.base64_variants.ORIGINAL);
+
+                            // Derive encryption key (identical to PHP sodium_crypto_pwhash)
+                            var derivedKey = s.crypto_pwhash(
+                                32, // SODIUM_CRYPTO_SECRETBOX_KEYBYTES
+                                password,
+                                keySalt,
+                                2,        // SODIUM_CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE
+                                67108864, // SODIUM_CRYPTO_PWHASH_MEMLIMIT_INTERACTIVE (64 MB)
+                                s.crypto_pwhash_ALG_ARGON2ID13
+                            );
+
+                            // Decode encrypted private key (base64 → nonce + ciphertext)
+                            var encryptedData = s.from_base64(response.privateKeyEnc, s.base64_variants.ORIGINAL);
+                            var nonce = encryptedData.slice(0, s.crypto_secretbox_NONCEBYTES); // 24 bytes
+                            var ciphertext = encryptedData.slice(s.crypto_secretbox_NONCEBYTES);
+
+                            // Decrypt private key PEM
+                            var privateKeyBytes = s.crypto_secretbox_open_easy(ciphertext, nonce, derivedKey);
+
+                            if (!privateKeyBytes) {
+                                console.error('Failed to decrypt private key');
+                                showLoginError();
+                                submitBtn.prop('disabled', false).val('Log in');
+                                return;
+                            }
+
+                            // Store decrypted PEM in sessionStorage (cleared when tab closes)
+                            var privateKeyPem = s.to_string(privateKeyBytes);
+                            sessionStorage.setItem('privateKey', privateKeyPem);
+
+                        } catch (e) {
+                            console.error('Key derivation error:', e);
+                            // Continue login even if key derivation fails
+                            // (user can still use the app, just won't be able to decrypt messages)
+                        }
+                    }
+
+                    // Redirect to homepage
+                    window.location.href = 'index.php';
+                },
+                error: function() {
+                    showLoginError();
+                    submitBtn.prop('disabled', false).val('Log in');
+                }
+            });
         });
+
+        function showLoginError() {
+            // Remove existing error notification if any
+            $('.notification.is-danger.mt-5').remove();
+            // Add error message
+            var errorHtml = '<div class="notification is-danger mt-5" style="max-width: 350px; margin: 0 auto;">'
+                + '<label class="label has-text-white">Error</label>'
+                + '<div class="has-text-white">Invalid email or password. Please try again.</div>'
+                + '</div>';
+            $('#loginCard').after(errorHtml);
+        }
     </script>
 </body>
 

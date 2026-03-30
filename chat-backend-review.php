@@ -26,7 +26,7 @@ header("X-Content-Type-Options: nosniff");
 header("X-XSS-Protection: 1; mode=block");
 header("Referrer-Policy: strict-origin-when-cross-origin");
 header("Permissions-Policy: geolocation=(), microphone=(), camera=()");
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://code.jquery.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://code.jquery.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 
 // =============================================================================
 // AUTHENTICATION CHECK
@@ -115,6 +115,9 @@ if ($studyOwnerID !== $userID) {
     header('Location: access-denied.php');
     exit;
 }
+
+// Check if the study owner has a public key (determines if legacy NA messages are encrypted)
+$ownerHasPublicKey = (bool) $database->get('users', 'publicKey', ['userID' => $studyOwnerID]);
 
 // =============================================================================
 // FETCH STATISTICS
@@ -345,9 +348,6 @@ $safeCsrfToken = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
                     to a CSV-file by clicking the "Export data"-button. To see the submissions provided by participants,
                     click
                     on the "Submissions"-tab above.
-                    <?php if (!empty($study['isEncrypted'])): ?>
-                    <br><br><i class="fa fa-lock"></i> All messages saved for this project are end-to-end encrypted and only accessible by you.
-                    <?php endif; ?>
                 </p>
                 </p>
 
@@ -410,19 +410,8 @@ $safeCsrfToken = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
                     "LIMIT"   => [$messagesOffset, $itemsPerPage]
                 ]
             );
-// Private key was decrypted during login using the user's password
-$privateKey = $_SESSION['privateKey'] ?? null;
-if (!empty($study['isEncrypted']) && $privateKey) {
-    foreach ($messages as &$m) {
-        if (isset($m['messageText']) && $m['messageText'] !== '') {
-            $m['messageText'] = decryptMessageWithPrivateKey($m['messageText'], $privateKey);
-        }
-        if (isset($m['passedVariables']) && $m['passedVariables'] !== '') {
-            $m['passedVariables'] = decryptMessageWithPrivateKey($m['passedVariables'], $privateKey);
-        }
-    }
-    unset($m);
-}
+// Decryption now happens client-side in the browser using forge.js
+// The private key is in sessionStorage (derived during login)
             ?>
 
 
@@ -514,27 +503,55 @@ if (!empty($study['isEncrypted']) && $privateKey) {
                                 <th>Date Time</th>
                                 <th>Sender</th>
                                 <th>Passed variables</th>
-                             </tr></thead><tbody>";
+                                </tr></thead><tbody>";
 
                 foreach ($messages as $message) {
                     // Escape all output for XSS protection - handle null values
                     $messageID = htmlspecialchars((string)($message['messageID'] ?? ''), ENT_QUOTES, 'UTF-8');
                     $participantID = htmlspecialchars($message['participantID'] ?? '', ENT_QUOTES, 'UTF-8');
                     $condition = htmlspecialchars($message['condition'] ?? '', ENT_QUOTES, 'UTF-8');
-                    $messageText = htmlspecialchars($message['messageText'] ?? '', ENT_QUOTES, 'UTF-8');
                     $messageDateTime = htmlspecialchars($message['messageDateTime'] ?? '', ENT_QUOTES, 'UTF-8');
                     $senderType = htmlspecialchars($message['senderType'] ?? '', ENT_QUOTES, 'UTF-8');
-                    $passedVariables = htmlspecialchars($message['passedVariables'] ?? '', ENT_QUOTES, 'UTF-8');
-                    
+
+                    $encType = $message['encryptionType'] ?? 'NA';
+                    $msgText = $message['messageText'] ?? '';
+                    $varsText = $message['passedVariables'] ?? '';
+
+                    // Determine if row is encrypted based on encryptionType column and study settings
+                    // e2e/server → encrypted; NA + owner has public key → legacy server-encrypted; NA + no key → plaintext
+                    $isEncryptedRow = ($encType === 'e2e' || $encType === 'server' || ($encType === 'NA' && $ownerHasPublicKey));
+
+                    if ($isEncryptedRow && !empty($msgText)) {
+                        $encMsg = htmlspecialchars($msgText, ENT_QUOTES, 'UTF-8');
+                        $msgTd = "<td class='encrypted-cell' data-enc=\"{$encMsg}\"><i class='fa fa-lock'></i> Encrypted</td>";
+                    } else {
+                        $msgTd = "<td>" . htmlspecialchars($msgText, ENT_QUOTES, 'UTF-8') . "</td>";
+                    }
+
+                    if ($isEncryptedRow && !empty($varsText)) {
+                        $encVars = htmlspecialchars($varsText, ENT_QUOTES, 'UTF-8');
+                        $varsTd = "<td class='encrypted-vars-cell' data-enc-vars=\"{$encVars}\"><i class='fa fa-lock'></i> Encrypted</td>";
+                    } else {
+                        $varsTd = "<td>" . htmlspecialchars($varsText, ENT_QUOTES, 'UTF-8') . "</td>";
+                    }
+
+                    // Lock icon with tooltip next to MessageID for encrypted rows
+                    $encLock = '';
+                    if ($encType === 'e2e') {
+                        $encLock = ' <i class="fa fa-lock" title="End-to-end encrypted" style="color:#3273dc;cursor:help;"></i>';
+                    } elseif ($encType === 'server' || ($encType === 'NA' && $ownerHasPublicKey)) {
+                        $encLock = ' <i class="fa fa-lock" title="Server-side encrypted" style="color:#3273dc;cursor:help;"></i>';
+                    }
+
                     $rowClass = ($message['senderType'] ?? '') === 'Participant' ? " class='has-background-info-light'" : '';
                     $table   .= "<tr{$rowClass}>
-                                    <td>{$messageID}</td>
+                                    <td>{$messageID}{$encLock}</td>
                                     <td>{$participantID}</td>
                                     <td>{$condition}</td>
-                                    <td>{$messageText}</td>
+                                    {$msgTd}
                                     <td>{$messageDateTime}</td>
                                     <td>{$senderType}</td>
-                                    <td>{$passedVariables}</td>
+                                    {$varsTd}
                                  </tr>";
                 }
 
@@ -593,9 +610,6 @@ if (!empty($study['isEncrypted']) && $privateKey) {
                     participant
                     number and message type. You can export the data to a CSV-file by clicking the "Export data"-button.
                     To see the messages sent to and by the AI, click on the "Messages"-tab above.
-                    <?php if (!empty($study['isEncrypted'])): ?>
-                    <br><br><i class="fa fa-lock"></i> All submissions saved for this project are end-to-end encrypted and only accessible by you.
-                    <?php endif; ?>
                 </p>
                 </p>
             </section>
@@ -648,17 +662,7 @@ if (!empty($study['isEncrypted']) && $privateKey) {
                     "LIMIT"   => [$submissionsOffset, $itemsPerPage]
                 ]
             );
-            if (!empty($study['isEncrypted']) && $privateKey) {
-                foreach ($submissions as &$s) {
-                    if (isset($s['submissionText']) && $s['submissionText'] !== '') {
-                        $s['submissionText'] = decryptMessageWithPrivateKey($s['submissionText'], $privateKey);
-                    }
-                    if (isset($s['passedVariables']) && $s['passedVariables'] !== '') {
-                        $s['passedVariables'] = decryptMessageWithPrivateKey($s['passedVariables'], $privateKey);
-                    }
-                }
-                unset($s);
-            }
+            // Submission decryption happens client-side (same as messages)
             ?>
 
             <?php if (count($submissions) <= 0): ?>
@@ -737,30 +741,57 @@ if (!empty($study['isEncrypted']) && $privateKey) {
                                 <th>Duration</th>
                                 <th>NumberMessages</th>
                                 <th>PassedVariables</th>
-                             </tr></thead><tbody>";
+                                </tr></thead><tbody>";
 
                 foreach ($submissions as $submission) {
                     // Escape all output for XSS protection - handle null values
                     $submissionID = htmlspecialchars((string)($submission['submissionID'] ?? ''), ENT_QUOTES, 'UTF-8');
                     $participantID = htmlspecialchars($submission['participantID'] ?? '', ENT_QUOTES, 'UTF-8');
                     $condition = htmlspecialchars($submission['condition'] ?? '', ENT_QUOTES, 'UTF-8');
-                    $submissionText = htmlspecialchars($submission['submissionText'] ?? '', ENT_QUOTES, 'UTF-8');
                     $submissionTime = htmlspecialchars($submission['submissionTime'] ?? '', ENT_QUOTES, 'UTF-8');
                     $startTime = htmlspecialchars($submission['startTime'] ?? '', ENT_QUOTES, 'UTF-8');
                     $duration = htmlspecialchars((string)($submission['duration'] ?? ''), ENT_QUOTES, 'UTF-8');
                     $numberMessages = htmlspecialchars((string)($submission['numberMessages'] ?? ''), ENT_QUOTES, 'UTF-8');
-                    $passedVariables = htmlspecialchars($submission['passedVariables'] ?? '', ENT_QUOTES, 'UTF-8');
-                    
+
+                    $encType = $submission['encryptionType'] ?? 'NA';
+                    $subText = $submission['submissionText'] ?? '';
+                    $varsText = $submission['passedVariables'] ?? '';
+
+                    // Determine if row is encrypted based on encryptionType column and study settings
+                    $isEncryptedRow = ($encType === 'e2e' || $encType === 'server' || ($encType === 'NA' && $ownerHasPublicKey));
+
+                    if ($isEncryptedRow && !empty($subText)) {
+                        $encText = htmlspecialchars($subText, ENT_QUOTES, 'UTF-8');
+                        $textTd = "<td class='encrypted-cell' data-enc=\"{$encText}\"><i class='fa fa-lock'></i> Encrypted</td>";
+                    } else {
+                        $textTd = "<td>" . htmlspecialchars($subText, ENT_QUOTES, 'UTF-8') . "</td>";
+                    }
+
+                    if ($isEncryptedRow && !empty($varsText)) {
+                        $encVars = htmlspecialchars($varsText, ENT_QUOTES, 'UTF-8');
+                        $varsTd = "<td class='encrypted-vars-cell' data-enc-vars=\"{$encVars}\"><i class='fa fa-lock'></i> Encrypted</td>";
+                    } else {
+                        $varsTd = "<td>" . htmlspecialchars($varsText, ENT_QUOTES, 'UTF-8') . "</td>";
+                    }
+
+                    // Lock icon with tooltip next to SubmissionID for encrypted rows
+                    $encLock = '';
+                    if ($encType === 'e2e') {
+                        $encLock = ' <i class="fa fa-lock" title="End-to-end encrypted" style="color:#3273dc;cursor:help;"></i>';
+                    } elseif ($encType === 'server' || ($encType === 'NA' && $ownerHasPublicKey)) {
+                        $encLock = ' <i class="fa fa-lock" title="Server-side encrypted" style="color:#3273dc;cursor:help;"></i>';
+                    }
+
                     $table .= "<tr>
-                                   <td>{$submissionID}</td>
+                                   <td>{$submissionID}{$encLock}</td>
                                    <td>{$participantID}</td>
                                    <td>{$condition}</td>
-                                   <td>{$submissionText}</td>
+                                   {$textTd}
                                    <td>{$submissionTime}</td>
                                    <td>{$startTime}</td>
                                    <td>{$duration}</td>
                                    <td>{$numberMessages}</td>
-                                   <td>{$passedVariables}</td>
+                                   {$varsTd}
                                  </tr>";
                 }
 
@@ -1090,6 +1121,8 @@ if (!empty($study['isEncrypted']) && $privateKey) {
     <script type="text/javascript" src="src/JS/iziToast.js"></script>
     <!--General JS-->
     <script type="text/javascript" src="src/JS/general.js?v=20260308"></script>
+    <!--forge.js for client-side RSA decryption (PKCS1v1.5 + RSA-OAEP)-->
+    <script src="https://cdn.jsdelivr.net/npm/node-forge@1.3.1/dist/forge.min.js"></script>
     <!--Basic Site Functionality-->
     <script type="text/javascript">
         // CSRF token and study data for JavaScript
@@ -1268,35 +1301,214 @@ if (!empty($study['isEncrypted']) && $privateKey) {
         }
 
         ////////////////////////////////////////
-        // CSV Download Logic
+        // Client-side Decryption (forge.js)
         ////////////////////////////////////////
+
+        var _studyIsEncrypted = <?php echo $ownerHasPublicKey ? 'true' : 'false'; ?>;
+
+        /**
+         * Decrypt a ciphertext string using the private key from sessionStorage.
+         * Supports two formats:
+         *   - Server-side (openssl_seal): base64(envKey):base64(iv):base64(sealed)
+         *     Uses PKCS1v1.5 RSA + RC4 envelope (openssl_seal default)
+         *   - E2E: e2e:base64(encKey):base64(iv):base64(data)
+         *     Uses RSA-OAEP + AES-256-CBC
+         *
+         * @param {string} ciphertext The encrypted string
+         * @param {forge.pki.privateKey} forgePrivateKey Parsed forge private key
+         * @returns {string|null} Decrypted plaintext or null on failure
+         */
+        function decryptMessage(ciphertext, forgePrivateKey) {
+            if (!ciphertext || !forgePrivateKey) return null;
+
+            try {
+                if (ciphertext.startsWith('e2e:')) {
+                    // E2E format: e2e:base64(rsaEncAesKey):base64(iv):base64(aesCiphertext)
+                    var parts = ciphertext.split(':');
+                    if (parts.length !== 4) return null;
+
+                    var encAesKey = forge.util.decode64(parts[1]);
+                    var iv = forge.util.decode64(parts[2]);
+                    var aesCiphertext = forge.util.decode64(parts[3]);
+
+                    // RSA-OAEP decrypt the AES key (SHA-1 matches Web Crypto default)
+                    var aesKey = forgePrivateKey.decrypt(encAesKey, 'RSA-OAEP', {
+                        md: forge.md.sha1.create()
+                    });
+
+                    // AES-256-CBC decrypt the data
+                    var decipher = forge.cipher.createDecipher('AES-CBC', aesKey);
+                    decipher.start({ iv: iv });
+                    decipher.update(forge.util.createBuffer(aesCiphertext));
+                    var ok = decipher.finish();
+                    if (!ok) return null;
+
+                    return decipher.output.toString('utf8');
+                } else {
+                    // Server-side format: base64(envKey):base64(iv):base64(sealedData)
+                    // openssl_seal uses RC4 by default, but our code uses AES-256-CBC
+                    var parts = ciphertext.split(':');
+                    if (parts.length !== 3) return null;
+
+                    var envKey = forge.util.decode64(parts[0]);
+                    var iv = forge.util.decode64(parts[1]);
+                    var sealedData = forge.util.decode64(parts[2]);
+
+                    // RSA PKCS1v1.5 decrypt the envelope key
+                    var aesKey = forgePrivateKey.decrypt(envKey, 'RSAES-PKCS1-V1_5');
+
+                    // AES-256-CBC decrypt the data
+                    var decipher = forge.cipher.createDecipher('AES-CBC', aesKey);
+                    decipher.start({ iv: iv });
+                    decipher.update(forge.util.createBuffer(sealedData));
+                    var ok = decipher.finish();
+                    if (!ok) return null;
+
+                    return decipher.output.toString('utf8');
+                }
+            } catch (e) {
+                console.error('Decryption error:', e);
+                return null;
+            }
+        }
+
+        /**
+         * Decrypt all .encrypted-cell and .encrypted-vars-cell elements on the page
+         */
+        function decryptAllCells(forgePrivateKey) {
+            // Decrypt message/submission text cells
+            document.querySelectorAll('.encrypted-cell').forEach(function(td) {
+                var enc = td.getAttribute('data-enc');
+                if (!enc) return;
+                var plaintext = decryptMessage(enc, forgePrivateKey);
+                if (plaintext !== null) {
+                    td.textContent = plaintext;
+                    td.classList.remove('encrypted-cell');
+                }
+            });
+
+            // Decrypt passed variables cells
+            document.querySelectorAll('.encrypted-vars-cell').forEach(function(td) {
+                var enc = td.getAttribute('data-enc-vars');
+                if (!enc) return;
+                var plaintext = decryptMessage(enc, forgePrivateKey);
+                if (plaintext !== null) {
+                    td.textContent = plaintext;
+                    td.classList.remove('encrypted-vars-cell');
+                }
+            });
+        }
+
+        // On page load: attempt to decrypt if study is encrypted
+        var _forgePrivateKey = null;
+        $(document).ready(function() {
+            if (!_studyIsEncrypted) return;
+
+            var pemKey = sessionStorage.getItem('privateKey');
+            if (!pemKey) {
+                // Show notice to log in again
+                var notice = '<div class="notification is-warning mt-3 mb-3" style="max-width: 760px; margin: 0 auto;">'
+                    + '<i class="fa fa-lock"></i> <b>Encrypted data.</b> Please log in again to view encrypted messages. '
+                    + 'Your private key is needed to decrypt the data and is only available in the browser session where you logged in.'
+                    + '</div>';
+                $('#messageDataContainer .section:first').after(notice);
+                $('#submissionDataContainer .section:first').after(notice);
+                return;
+            }
+
+            try {
+                _forgePrivateKey = forge.pki.privateKeyFromPem(pemKey);
+                decryptAllCells(_forgePrivateKey);
+            } catch (e) {
+                console.error('Failed to parse private key:', e);
+            }
+        });
+
+        ////////////////////////////////////////
+        // CSV Download Logic (client-side decryption)
+        ////////////////////////////////////////
+
+        /**
+         * Escape a value for CSV (RFC 4180)
+         */
+        function csvEscape(val, sep) {
+            if (val === null || val === undefined) val = '';
+            val = String(val);
+            if (val.indexOf(sep) !== -1 || val.indexOf('"') !== -1 || val.indexOf('\n') !== -1 || val.indexOf('\r') !== -1) {
+                return '"' + val.replace(/"/g, '""') + '"';
+            }
+            return val;
+        }
+
+        /**
+         * Build CSV string from JSON rows, decrypting encrypted fields
+         */
+        function buildCsvFromJson(rows, columns, encryptedFields, sep, stripHtml, forgeKey) {
+            var lines = [];
+            // BOM + header
+            lines.push(columns.map(function(c) { return csvEscape(c, sep); }).join(sep));
+
+            rows.forEach(function(row) {
+                var line = columns.map(function(col) {
+                    var val = row[col] ?? '';
+                    // Decrypt if this is an encrypted field based on encryptionType
+                    var encType = row['encryptionType'] || 'NA';
+                    var isEncrypted = (encType === 'e2e' || encType === 'server' || (encType === 'NA' && _studyIsEncrypted));
+                    if (encryptedFields.indexOf(col) !== -1 && isEncrypted && val && forgeKey) {
+                        var decrypted = decryptMessage(val, forgeKey);
+                        if (decrypted !== null) val = decrypted;
+                    }
+                    if (stripHtml && col === 'submissionText') {
+                        var tmp = document.createElement('div');
+                        tmp.innerHTML = val;
+                        val = tmp.textContent || tmp.innerText || '';
+                    }
+                    return csvEscape(val, sep);
+                });
+                lines.push(line.join(sep));
+            });
+
+            return '\uFEFF' + lines.join('\r\n');
+        }
+
+        function triggerCsvDownload(csvString, filename) {
+            var blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        }
 
         // Full CSV Download (Messages) modal confirm button
         $('#confirmDownloadFullCSVButtonMessages').click(function() {
             var btn = $(this);
             btn.addClass('is-loading');
 
-            // Get selected separator
-            var sep = $('input[name="csvSepMessages"]:checked').val();
-            var url = 'Backend/Studies/messages-download.php?studyCode=' + studyCode + '&sep=' + sep;
+            var sep = $('input[name="csvSepMessages"]:checked').val() === 'semicolon' ? ';' : ',';
+            var url = 'Backend/Studies/messages-download.php?studyCode=' + studyCode + '&format=json';
 
-            // Fetch the CSV as a blob, trigger download, then re-enable button
-            fetch(url, {
-                    credentials: 'same-origin'
-                })
+            fetch(url, { credentials: 'same-origin' })
                 .then(function(response) {
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    return response.blob();
+                    if (!response.ok) throw new Error('Network response was not ok (status ' + response.status + ')');
+                    return response.text();
                 })
-                .then(function(blob) {
-                    var downloadUrl = URL.createObjectURL(blob);
-                    var a = document.createElement('a');
-                    a.href = downloadUrl;
-                    a.download = 'messages_' + getFormattedDate() + '.csv';
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    URL.revokeObjectURL(downloadUrl);
+                .then(function(text) {
+                    var rows;
+                    try {
+                        rows = JSON.parse(text);
+                    } catch (e) {
+                        console.error('Invalid JSON response:', text.substring(0, 500));
+                        throw new Error('Server returned invalid JSON');
+                    }
+                    if (rows.error) throw new Error(rows.error);
+                    var columns = ['messageID', 'participantID', 'condition', 'messageText',
+                                   'messageDateTime', 'senderType', 'passedVariables'];
+                    var csv = buildCsvFromJson(rows, columns, ['messageText', 'passedVariables'], sep, false, _forgePrivateKey);
+                    triggerCsvDownload(csv, 'messages_' + getFormattedDate() + '.csv');
                 })
                 .catch(function(error) {
                     console.error('Download error:', error);
@@ -1316,30 +1528,29 @@ if (!empty($study['isEncrypted']) && $privateKey) {
             var btn = $(this);
             btn.addClass('is-loading');
 
-            // Get selected separator
-            var sep = $('input[name="csvSepSubmissions"]:checked').val();
-            // Get HTML‐strip option
-            var strip = $('#stripHtmlSubmissions').prop('checked') ? 1 : 0;
-            var url = 'Backend/Studies/submissions-download.php?studyCode=' + studyCode
-               + '&sep=' + sep
-               + '&stripHtml=' + strip;
+            var sep = $('input[name="csvSepSubmissions"]:checked').val() === 'semicolon' ? ';' : ',';
+            var strip = $('#stripHtmlSubmissions').prop('checked');
+            var url = 'Backend/Studies/submissions-download.php?studyCode=' + studyCode + '&format=json';
 
-            fetch(url, {
-                    credentials: 'same-origin'
-                })
+            fetch(url, { credentials: 'same-origin' })
                 .then(function(response) {
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    return response.blob();
+                    if (!response.ok) throw new Error('Network response was not ok (status ' + response.status + ')');
+                    return response.text();
                 })
-                .then(function(blob) {
-                    var downloadUrl = URL.createObjectURL(blob);
-                    var a = document.createElement('a');
-                    a.href = downloadUrl;
-                    a.download = 'submissions_' + getFormattedDate() + '.csv';
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    URL.revokeObjectURL(downloadUrl);
+                .then(function(text) {
+                    var rows;
+                    try {
+                        rows = JSON.parse(text);
+                    } catch (e) {
+                        console.error('Invalid JSON response:', text.substring(0, 500));
+                        throw new Error('Server returned invalid JSON');
+                    }
+                    if (rows.error) throw new Error(rows.error);
+                    var columns = ['submissionID', 'participantID', 'condition', 'submissionText',
+                                   'submissionTime', 'startTime', 'duration', 'numberMessages',
+                                   'passedVariables'];
+                    var csv = buildCsvFromJson(rows, columns, ['submissionText', 'passedVariables'], sep, strip, _forgePrivateKey);
+                    triggerCsvDownload(csv, 'submissions_' + getFormattedDate() + '.csv');
                 })
                 .catch(function(error) {
                     console.error('Download error:', error);

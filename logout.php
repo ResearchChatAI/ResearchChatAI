@@ -34,7 +34,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 header("Permissions-Policy: geolocation=(), microphone=(), camera=()");
 
 // Content Security Policy - prevent XSS and injection attacks
-header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 
 // Prevent caching of logout page
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
@@ -131,6 +131,11 @@ session_regenerate_id(true);
             </div>
         </div>
     </section>
+
+    <!-- Clear client-side private key on logout -->
+    <script>
+        sessionStorage.removeItem('privateKey');
+    </script>
 </body>
 
 </html>

@@ -263,21 +263,16 @@ function updateUserPassword($database, int $userID, string $oldPassword, string 
         $hasEncryption = !empty($user['keySalt']) && !empty($user['privateKeyEnc']);
         
         if ($hasEncryption) {
-            // Check if private key is already in session
-            $privateKey = $_SESSION['privateKey'] ?? null;
-            
-            // If not in session, decrypt it
-            if ($privateKey === null) {
-                $privateKey = decryptPrivateKey(
-                    $oldPassword,
-                    $user['privateKeyEnc'],
-                    $user['keySalt']
-                );
-                
-                if ($privateKey === false) {
-                    $result['message'] = 'Failed to decrypt encryption keys';
-                    return $result;
-                }
+            // Decrypt private key using old password (private key is never stored server-side)
+            $privateKey = decryptPrivateKey(
+                $oldPassword,
+                $user['privateKeyEnc'],
+                $user['keySalt']
+            );
+
+            if ($privateKey === false) {
+                $result['message'] = 'Failed to decrypt encryption keys';
+                return $result;
             }
             
             // Re-encrypt private key with new password

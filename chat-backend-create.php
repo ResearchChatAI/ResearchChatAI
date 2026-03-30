@@ -1584,6 +1584,103 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
         </div>
       </section>
 
+      <hr>
+      <!--Encryption Settings START-->
+      <section class="section">
+        <h4 class="title is-3 scrollHeading" id="encryptionSettingsTitle">
+          Encryption
+          <button class="mbHelpButton big" mbHelpTarget="#encryptionHelp">
+            <i class="fa fa-question"></i>
+          </button>
+        </h4>
+
+        <!--Help box START-->
+        <div class="mbHelpBox notification is-info is-light mt-3" id="encryptionHelp">
+          <div class="columns">
+            <div class="column colWithIcon">
+              <span class="icon">
+                <i class="fa fa-question"></i>
+              </span>
+            </div>
+            <div class="column">
+              <p><b>Help:</b> Choose how participant messages are protected. Both options encrypt stored data so that only you can read it. The difference is whether the ResearchChatAI server ever sees messages in plain text during processing.</p>
+            </div>
+          </div>
+        </div>
+        <!--Help box END-->
+
+        <p>Choose how messages between participants and the AI are protected. This setting affects how data flows through our servers and how your API key is handled.</p>
+
+        <div class="formRadioGroup mt-5">
+
+          <!-- Server-Side Encryption -->
+          <div class="radioButton <?php echo (($study["encryptionMode"] ?? 'server') == "server") ? "active" : ""; ?>"
+            fieldKey="encryptionMode"
+            fieldValue="server"
+            saveIndicatorElement="#encryptionSettingsTitle"
+            radioAccordionTarget="#followUpEncryptionServer">
+            <span>Server-Side Encryption</span>
+            <span class="circle"><i class="fa fa-check"></i></span>
+          </div>
+          <div id="followUpEncryptionServer" class="followUpContainer mt-3 mb-5"
+            <?php echo (($study["encryptionMode"] ?? 'server') != "server") ? "style='display:none;'" : ""; ?>>
+            <div class="notification is-light is-info">
+              <p>
+                <strong><i class="fa fa-shield-alt mr-1"></i> How it works:</strong>
+                All conversation data is encrypted before it is saved in our database using your personal public key. This means that once a message is stored, <strong>only you can decrypt and read it</strong> &mdash; we as platform operators cannot access stored conversations.
+              </p>
+              <p class="mt-3">
+                During message processing, the server briefly handles messages in plain text in order to forward them to the AI provider. We do not log, inspect, or store these plain-text messages.
+                Your <strong>API key is securely managed on the server</strong> and is never exposed to participants or transmitted to the browser.
+              </p>
+              <p class="mt-3 has-text-grey">
+                <i class="fa fa-info-circle mr-1"></i>
+                This is the recommended setting for most studies. It provides strong data protection while keeping your API key safe.
+              </p>
+            </div>
+          </div>
+
+          <!-- End-to-End Encryption -->
+          <div class="radioButton <?php echo (($study["encryptionMode"] ?? 'server') == "e2e") ? "active" : ""; ?>"
+            fieldKey="encryptionMode"
+            fieldValue="e2e"
+            saveIndicatorElement="#encryptionSettingsTitle"
+            radioAccordionTarget="#followUpEncryptionE2E">
+            <span>End-to-End Encryption</span>
+            <span class="circle"><i class="fa fa-check"></i></span>
+          </div>
+          <div id="followUpEncryptionE2E" class="followUpContainer mt-3 mb-5"
+            <?php echo (($study["encryptionMode"] ?? 'server') != "e2e") ? "style='display:none;'" : ""; ?>>
+            <div class="notification is-light is-success">
+              <p>
+                <strong><i class="fa fa-lock mr-1"></i> How it works:</strong>
+                Messages are sent <strong>directly from the participant&rsquo;s device to the AI provider</strong>, completely bypassing the ResearchChatAI server. Before any data is sent back to ResearchChatAI for storage, it is encrypted on the participant&rsquo;s device using your public key. This means that we as platform operators <strong>can never, at any point, see the messages in plain text</strong>.
+              </p>
+            </div>
+            <div class="notification is-light is-info mt-3">
+              <p>
+                <strong><i class="fa fa-exclamation-triangle mr-1"></i> Important: API Key Exposure Risk</strong>
+              </p>
+              <p class="mt-2">
+                Because messages are sent directly from the participant&rsquo;s browser to the AI provider, <strong>your API key must be delivered to the browser</strong>. A technically savvy participant could extract the API key and use it for their own purposes, potentially incurring charges on your account.
+              </p>
+              <p class="mt-2"><strong>To minimize risk, you should:</strong></p>
+              <ul class="mt-1" style="margin-left: 1.5em; list-style: disc;">
+                <li><strong>Create a dedicated API key</strong> for this study only</li>
+                <li>Set strict <strong>spending limits</strong> on the API key used for this study</li>
+                <li><strong>Do not reuse</strong> this API key for other purposes</li>
+                <li><strong>Delete the API key immediately</strong> after the study is completed</li>
+              </ul>
+              <p class="mt-3">
+                <strong>By selecting end-to-end encryption, you accept the risk that an unauthorized user could steal and misuse the API key.</strong>
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+      <!--Encryption Settings END-->
+
       <!--Go to next step button with arrow right-->
       <section class="section mt-5" style="margin-bottom: 120px;">
         <button class="button is-primary is-pulled-right goToStepButton" data-target="4">Go to Step 4 <i
@@ -4601,7 +4698,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
         var $btn = $(this);
         $btn.addClass('is-loading');
 
-        $.getJSON('customConnectorTemplates/' + filename)
+        $.getJSON('customConnectorTemplates/' + filename + '?v=' + Date.now())
           .done(function(tpl) {
             activeTemplate = tpl;
 

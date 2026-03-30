@@ -2,22 +2,20 @@
 declare(strict_types=1);
 
 /* ------------------------------------------------------------------
- *  saveResponse.php  –  ResearchChatAI
+ *  saveE2EMessage.php  –  ResearchChatAI
  *
- *  Third step of the three-phase streaming architecture:
- *    1. prepareChat.php  → saves participant message, builds AI config
- *    2. Node stream-proxy → pipes AI response to browser (long-lived)
- *    3. saveResponse.php  → persists AI response to DB  ← YOU ARE HERE
+ *  Persists a pre-encrypted message (participant or AI) to the DB.
+ *  Used exclusively in End-to-End encryption mode where all encryption
+ *  happens client-side. The server never sees plaintext.
  *
- *  Called by the frontend JS after the SSE stream completes.
- *  Receives the fully-accumulated AI response text and saves it.
- *  This is a fast, non-blocking request (~50-150 ms).
+ *  Expects POST parameters:
+ *    studyCode       – alphanumeric study identifier
+ *    participantID   – alphanumeric participant identifier
+ *    encryptedMsg    – client-encrypted message (e2e:b64:b64:b64 format)
+ *    senderType      – "Participant" or "AI"
+ *    condition       – experimental condition number
+ *    passedVariables – encrypted passed variables (optional)
  *
- *  Security notes:
- *  - Input validation mirrors prepareChat.php for consistency.
- *  - Message size is capped to prevent abuse.
- *  - No internal details are leaked in error responses.
- * 
  * ResearchChatAI
  * Authors: Marc Becker, David de Jong
  * License: MIT
@@ -34,26 +32,20 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-cache, no-store');
 header('X-Content-Type-Options: nosniff');
 
-/* Handle CORS preflight */
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
-/* ------------------------------------------------------------------
- *  Dependencies
- * ------------------------------------------------------------------ */
 require_once('../MySQL/medoo-Credentials.php');
-require_once('../Util/crypto.php');
 
 /* ------------------------------------------------------------------
- *  POST payload  (with input validation)
+ *  Validate input
  * ------------------------------------------------------------------ */
 $studyCode       = $_POST['studyCode'] ?? null;
 $participantID   = $_POST['participantID'] ?? null;
-$message         = $_POST['message'] ?? '';
-$reasoning       = $_POST['reasoning'] ?? '';
+$encryptedMsg    = $_POST['encryptedMsg'] ?? '';
+$senderType      = $_POST['senderType'] ?? '';
 $condition       = $_POST['condition'] ?? -1;
 $passedVariables = $_POST['passedVariables'] ?? '';
-
-/* --- Sanitize / validate (same rules as prepareChat.php) --- */
+$encryptionType  = $_POST['encryptionType'] ?? 'e2e';
 
 if (!$studyCode || !preg_match('/^[a-zA-Z0-9]+$/', (string) $studyCode)) {
     http_response_code(400);
@@ -67,28 +59,33 @@ if (!$participantID || !preg_match('/^[a-zA-Z0-9_\-]{1,64}$/', (string) $partici
     exit;
 }
 
+if (!in_array($senderType, ['Participant', 'AI'], true)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Invalid senderType']);
+    exit;
+}
+
+if (trim($encryptedMsg) === '') {
+    http_response_code(400);
+    echo json_encode(['error' => 'Empty encrypted message']);
+    exit;
+}
+
+/* Guard against oversized payloads (max ~2 MB) */
+if (strlen($encryptedMsg) > 2 * 1024 * 1024) {
+    http_response_code(413);
+    echo json_encode(['error' => 'Message too large']);
+    exit;
+}
+
 $condition = is_numeric($condition) ? (int) $condition : -1;
 
-if (trim((string) $message) === '') {
-    http_response_code(400);
-    echo json_encode(['error' => 'Empty AI message — nothing to save']);
-    exit;
-}
-
-/* Guard against oversized messages (max ~1 MB — well above any normal AI response) */
-if (strlen((string) $message) > 1024 * 1024) {
-    http_response_code(413);
-    echo json_encode(['error' => 'AI message too large']);
-    exit;
-}
-
 /* ------------------------------------------------------------------
- *  Study lookup  (minimal — only fields needed for encryption)
+ *  Verify study exists and uses E2E encryption
  * ------------------------------------------------------------------ */
 $study = $database->get('studies', [
     'studyID',
-    'studyOwner',
-    'isEncrypted'
+    'encryptionMode',
 ], ['studyCode' => $studyCode]);
 
 if (!$study) {
@@ -97,33 +94,24 @@ if (!$study) {
     exit;
 }
 
-$publicKey = null;
-if (!empty($study['isEncrypted'])) {
-    $publicKey = $database->get('users', 'publicKey', ['userID' => $study['studyOwner']]);
+if (($study['encryptionMode'] ?? 'server') !== 'e2e') {
+    http_response_code(400);
+    echo json_encode(['error' => 'Study does not use end-to-end encryption']);
+    exit;
 }
 
 /* ------------------------------------------------------------------
- *  Encrypt if needed & persist
+ *  Store pre-encrypted message (no server-side encryption needed)
  * ------------------------------------------------------------------ */
-$aiMsgToStore = (!empty($study['isEncrypted']) && $publicKey)
-    ? encryptMessageWithPublicKey($message, $publicKey)
-    : $message;
-
-$aiVarsToStore = (!empty($study['isEncrypted']) && $publicKey)
-    ? encryptMessageWithPublicKey($passedVariables, $publicKey)
-    : $passedVariables;
-
-$encryptionType = (!empty($study['isEncrypted']) && $publicKey) ? 'server' : 'NA';
-
 $database->insert('messages', [
     'participantID'   => $participantID,
     'studyID'         => $study['studyID'],
-    'messageText'     => $aiMsgToStore,
-    'senderType'      => 'AI',
+    'messageText'     => $encryptedMsg,
+    'senderType'      => $senderType,
     'messageDateTime' => date('Y-m-d H:i:s'),
     'condition'       => $condition,
-    'passedVariables' => $aiVarsToStore,
-    'encryptionType'  => $encryptionType,
+    'passedVariables' => $passedVariables,
+    'encryptionType'  => in_array($encryptionType, ['e2e', 'NA'], true) ? $encryptionType : 'e2e',
 ]);
 
 echo json_encode(['ok' => true]);

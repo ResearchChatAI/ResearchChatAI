@@ -266,33 +266,33 @@ function decryptMessageWithPrivateKey(string $ciphertext, ?string $privateKey): 
     }
     
     try {
-        // Parse ciphertext format: envelopeKey:iv:sealedData
+        // Server-side format (from openssl_seal): base64(envelopeKey):base64(iv):base64(sealedData)
         $parts = explode(':', $ciphertext, 3);
-        
+
         if (count($parts) !== 3) {
             error_log("WARNING: Invalid ciphertext format - expected 3 parts, got " . count($parts));
             return $ciphertext;
         }
-        
+
         list($envelopeKeyB64, $ivB64, $sealedDataB64) = $parts;
-        
+
         // Decode base64 components
         $envelopeKey = base64_decode($envelopeKeyB64, true);
         $iv = base64_decode($ivB64, true);
         $sealedData = base64_decode($sealedDataB64, true);
-        
+
         // Validate decoded data
         if ($envelopeKey === false || $iv === false || $sealedData === false) {
             error_log("WARNING: Invalid base64 encoding in ciphertext components");
             return $ciphertext;
         }
-        
+
         // Validate IV length
         if (strlen($iv) !== CRYPTO_AES_IV_LENGTH) {
             error_log("WARNING: Invalid IV length: " . strlen($iv) . " (expected " . CRYPTO_AES_IV_LENGTH . ")");
             return $ciphertext;
         }
-        
+
         // Decrypt using private key
         $plaintext = '';
         $result = openssl_open(
@@ -303,13 +303,13 @@ function decryptMessageWithPrivateKey(string $ciphertext, ?string $privateKey): 
             CRYPTO_CIPHER_METHOD,
             $iv
         );
-        
+
         if (!$result) {
             $error = openssl_error_string();
             error_log("WARNING: openssl_open failed: " . ($error ?: 'Unknown error'));
             return $ciphertext;
         }
-        
+
         return $plaintext;
         
     } catch (Exception $e) {

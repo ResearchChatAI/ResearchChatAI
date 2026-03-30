@@ -35,6 +35,7 @@
       "headers": {
         "Content-Type": "application/json",
         "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
         "Accept": "text/event-stream"
       },
       "timeoutMs": 30000,

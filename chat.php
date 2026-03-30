@@ -165,7 +165,8 @@ if (!empty($study['isEncrypted'])) {
         'maxNumberAiMessages',
         'maxAiMessagesReachedText',
         'maxNumberParticipantMessages',
-        'maxParticipantMessagesReachedText'
+        'maxParticipantMessagesReachedText',
+        'customConnectorConfiguration'
     ];
     foreach ($decryptFields as $field) {
         if (isset($study[$field])) {
@@ -823,9 +824,94 @@ if ($study['dataCollectionActive'] == 0) {
     }
     ?>
 
+    <?php
+    // =========================================================================
+    // E2E ENCRYPTION: Build connector config for client-side API calls
+    // =========================================================================
+    $encryptionMode = $study['encryptionMode'] ?? 'server';
+    $e2eConfig = null;
+
+    if ($encryptionMode === 'e2e') {
+        // Build the same connector config that prepareChat.php would build,
+        // but expose it to the client so the browser can call the AI directly.
+        $streamFlag = ($streaming == 1);
+        $providerFile = match ($study['modelProvider'] ?? 'custom') {
+            'openai'     => 'openai.php',
+            'openrouter' => 'openrouter.php',
+            default      => 'custom.php',
+        };
+        require(__DIR__ . '/Backend/Chat/connectors/' . $providerFile);
+        // $connector is now set
+
+        // Resolve auth into headers
+        require_once(__DIR__ . '/Backend/Chat/payload.php');
+        $e2eHeaders = $connector['request']['headers'] ?? [];
+        if (!empty($connector['request']['auth'])) {
+            $e2eHeaders = resolveAuthHeaders($e2eHeaders, $connector['request']['auth']);
+        }
+
+        // Separate sensitive header values (API keys) from non-sensitive ones.
+        // Sensitive values are encrypted with a per-page AES key so they don't
+        // appear in plaintext in "View Source". The JS decrypts them at runtime.
+        $e2eSafeHeaders = [];
+        $e2eSensitiveHeaders = [];
+        foreach ($e2eHeaders as $name => $value) {
+            $lowerName = strtolower($name);
+            if ($lowerName === 'authorization' || $lowerName === 'x-api-key' || $lowerName === 'api-key') {
+                $e2eSensitiveHeaders[$name] = $value;
+            } else {
+                $e2eSafeHeaders[$name] = $value;
+            }
+        }
+
+        // Encrypt sensitive data with a random per-page AES key so it doesn't
+        // appear in plaintext in "View Source". Decrypted at runtime in JS.
+        $pageKey = random_bytes(32);
+        $pageIv  = random_bytes(16);
+        $e2eSensitiveData = [
+            'headers'      => $e2eSensitiveHeaders,
+            'instructions' => getConditionalStudyValue("aiInstructions"),
+        ];
+        $encSensitive = openssl_encrypt(
+            json_encode($e2eSensitiveData),
+            'aes-256-cbc',
+            $pageKey,
+            OPENSSL_RAW_DATA,
+            $pageIv
+        );
+
+        $e2eConfig = [
+            'url'                => $connector['request']['url'] ?? '',
+            'method'             => $connector['request']['method'] ?? 'POST',
+            'headers'            => $e2eSafeHeaders,
+            'aiPayload'          => $connector['aiPayload'] ?? [],
+            'historyMode'        => $connector['history']['mode'] ?? 'array',
+            'extractSystem'      => !empty($connector['history']['extractSystem']),
+            'systemParam'        => $connector['history']['systemParam'] ?? 'system',
+            'resultPath'         => $connector['response']['resultPath'] ?? null,
+            'reasoningPath'      => $connector['response']['reasoningPath'] ?? null,
+            'extractors'         => $connector['response']['stream']['extractors'] ?? null,
+            'reasoningExtractors'=> $connector['response']['stream']['reasoningExtractors'] ?? null,
+            'stream'             => $streamFlag,
+        ];
+
+        // Get public key for client-side encryption
+        $e2ePublicKey = $database->get('users', 'publicKey', ['userID' => $study['studyOwner']]);
+    }
+    ?>
+
     <script type="text/javascript">
         var baseURL = <?php echo json_encode($baseURL); ?>;
-        var instructions = <?php echo json_encode(getConditionalStudyValue("aiInstructions")); ?>;
+        var encryptionMode = <?php echo json_encode($encryptionMode); ?>;
+        <?php if ($encryptionMode === 'e2e'): ?>
+        var e2eConfig = <?php echo json_encode($e2eConfig); ?>;
+        var e2ePublicKeyPem = <?php echo json_encode($e2ePublicKey ?? ''); ?>;
+        // Encrypted API key headers — decrypted at runtime so they don't appear in page source
+        var _ekd = <?php echo json_encode(base64_encode($encSensitive)); ?>;
+        var _ekk = <?php echo json_encode(base64_encode($pageKey)); ?>;
+        var _eki = <?php echo json_encode(base64_encode($pageIv)); ?>;
+        <?php endif; ?>
+        var instructions = <?php echo ($encryptionMode === 'e2e') ? 'null' : json_encode(getConditionalStudyValue("aiInstructions")); ?>;
         var aiDelay = <?php echo json_encode(getConditionalStudyValue("aiDelay")); ?>;
         var aiDelayIsPerCharacter = parseInt(<?php echo json_encode(getConditionalStudyValue("aiDelayIsPerCharacter", 0)); ?>) || 0;
         var aiDelayBeforeFirstMessage = parseInt(<?php echo json_encode(getConditionalStudyValue("aiDelayBeforeFirstMessage", 0)); ?>) || 0;
@@ -1499,13 +1585,224 @@ if ($study['dataCollectionActive'] == 0) {
         });
 
         // -----------------------------------------------------------------------
+        // E2E ENCRYPTION HELPERS
+        // -----------------------------------------------------------------------
+
+        /**
+         * Decrypt sensitive config (API key headers + system prompt) that were
+         * AES-encrypted server-side. Called once before the first API request.
+         */
+        var _e2eSensitiveReady = false;
+        async function _e2eDecryptHeaders() {
+            if (_e2eSensitiveReady) return;
+            if (typeof _ekd === 'undefined' || !_ekd) { _e2eSensitiveReady = true; return; }
+
+            var keyBytes = Uint8Array.from(atob(_ekk), function(c) { return c.charCodeAt(0); });
+            var ivBytes  = Uint8Array.from(atob(_eki), function(c) { return c.charCodeAt(0); });
+            var encBytes = Uint8Array.from(atob(_ekd), function(c) { return c.charCodeAt(0); });
+
+            var aesKey = await crypto.subtle.importKey(
+                'raw', keyBytes.buffer, { name: 'AES-CBC' }, false, ['decrypt']
+            );
+            var decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-CBC', iv: ivBytes }, aesKey, encBytes.buffer
+            );
+            var sensitive = JSON.parse(new TextDecoder().decode(decrypted));
+            if (sensitive.headers) Object.assign(e2eConfig.headers, sensitive.headers);
+            if (sensitive.instructions) instructions = sensitive.instructions;
+
+            // Clear encrypted data from global scope
+            _ekd = null; _ekk = null; _eki = null;
+            _e2eSensitiveReady = true;
+        }
+
+        /**
+         * Import a PEM-encoded RSA public key for use with Web Crypto API.
+         * @param {string} pem - PEM public key string
+         * @returns {Promise<CryptoKey>}
+         */
+        async function _e2eImportPublicKey(pem) {
+            const b64 = pem.replace(/-----BEGIN PUBLIC KEY-----/, '')
+                           .replace(/-----END PUBLIC KEY-----/, '')
+                           .replace(/\s/g, '');
+            const binary = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+            return crypto.subtle.importKey(
+                'spki', binary.buffer,
+                { name: 'RSA-OAEP', hash: 'SHA-1' },
+                false, ['encrypt']
+            );
+        }
+
+        /**
+         * Encrypt a message client-side using RSA-OAEP + AES-256-CBC.
+         * Produces format: e2e:base64(encryptedKey):base64(iv):base64(encryptedData)
+         * Compatible with decryptMessageWithPrivateKey() in crypto.php.
+         *
+         * @param {string} plaintext - Message to encrypt
+         * @param {CryptoKey} rsaPublicKey - Imported RSA public key
+         * @returns {Promise<string>} Encrypted string in e2e: format
+         */
+        async function _e2eEncrypt(plaintext, rsaPublicKey) {
+            // Generate random AES-256 key and IV
+            const aesKey = await crypto.subtle.generateKey(
+                { name: 'AES-CBC', length: 256 }, true, ['encrypt']
+            );
+            const iv = crypto.getRandomValues(new Uint8Array(16));
+
+            // Encrypt plaintext with AES-CBC
+            const encoded = new TextEncoder().encode(plaintext);
+            const encryptedData = await crypto.subtle.encrypt(
+                { name: 'AES-CBC', iv: iv }, aesKey, encoded
+            );
+
+            // Export raw AES key and encrypt it with RSA-OAEP
+            const rawAesKey = await crypto.subtle.exportKey('raw', aesKey);
+            const encryptedKey = await crypto.subtle.encrypt(
+                { name: 'RSA-OAEP' }, rsaPublicKey, rawAesKey
+            );
+
+            // Encode to base64
+            function toB64(buf) {
+                return btoa(String.fromCharCode.apply(null, new Uint8Array(buf)));
+            }
+
+            return 'e2e:' + toB64(encryptedKey) + ':' + toB64(iv) + ':' + toB64(encryptedData);
+        }
+
+        // Cache the imported public key
+        var _e2eCachedKey = null;
+        async function _e2eGetPublicKey() {
+            if (_e2eCachedKey) return _e2eCachedKey;
+            if (typeof e2ePublicKeyPem === 'undefined' || !e2ePublicKeyPem) {
+                throw new Error('E2E public key not available');
+            }
+            _e2eCachedKey = await _e2eImportPublicKey(e2ePublicKeyPem);
+            return _e2eCachedKey;
+        }
+
+        /**
+         * Build the API request payload for E2E direct-to-provider calls.
+         * Mirrors what prepareChat.php + payload.php do server-side.
+         *
+         * @param {Array} chatHistory - Chat history array
+         * @param {string} systemPrompt - System/AI instructions
+         * @returns {object} { url, method, headers, body }
+         */
+        function _e2eBuildRequest(chatHistory, systemPrompt) {
+            var cfg = e2eConfig;
+            // Deep clone aiPayload and replace {{systemPrompt}} placeholders
+            var payloadStr = JSON.stringify(cfg.aiPayload);
+            payloadStr = payloadStr.split('{{systemPrompt}}').join(systemPrompt || '');
+            var payload = JSON.parse(payloadStr);
+
+            // Inject chat history
+            // compileChatHistory() includes a system message — filter it out
+            // so we can place it correctly based on extractSystem config
+            var filteredHistory = chatHistory.filter(function(m) { return m.role !== 'system'; });
+            if (cfg.historyMode === 'array') {
+                var msgs = [];
+                if (systemPrompt && !cfg.extractSystem) {
+                    // Keep system prompt in messages array (e.g., OpenAI)
+                    msgs.push({ role: 'system', content: systemPrompt });
+                }
+                msgs = msgs.concat(filteredHistory);
+                payload.messages = msgs;
+
+                // Extract system prompt to a top-level parameter (e.g., Anthropic uses "system")
+                if (systemPrompt && cfg.extractSystem) {
+                    var paramName = cfg.systemParam || 'system';
+                    if (!payload[paramName]) {
+                        payload[paramName] = systemPrompt;
+                    }
+                }
+            } else if (cfg.historyMode === 'string') {
+                var histStr = '';
+                chatHistory.forEach(function(m) {
+                    var text = typeof m.content === 'string' ? m.content :
+                              (Array.isArray(m.content) ? m.content.map(function(p) { return p.text || ''; }).join('') : '');
+                    histStr += (m.role === 'user' ? 'User: ' : 'Assistant: ') + text + '\n';
+                });
+                if (systemPrompt) { histStr = 'System: ' + systemPrompt + '\n' + histStr; }
+                payload.prompt = histStr;
+            }
+
+            // Remove empty string values for keys like "system" — some providers
+            // (e.g. Anthropic) behave differently with "system":"" vs omitting it.
+            Object.keys(payload).forEach(function(k) {
+                if (payload[k] === '') delete payload[k];
+            });
+
+            // Normalize messages: flatten multi-part content to plain strings when
+            // no images are present, and filter out any with null/empty content.
+            if (payload.messages) {
+                payload.messages = payload.messages.map(function(m) {
+                    if (Array.isArray(m.content)) {
+                        var hasImage = m.content.some(function(p) { return p.type === 'image_url'; });
+                        if (!hasImage) {
+                            return Object.assign({}, m, {
+                                content: m.content.map(function(p) { return p.text || ''; }).join('')
+                            });
+                        }
+                    }
+                    return m;
+                }).filter(function(m) {
+                    return m.content !== null && m.content !== undefined && m.content !== '';
+                });
+            }
+
+            // Responses API transformation (/v1/responses)
+            // Must match the format used by messagesToResponsesInput() in payload.php:
+            // Each item is {role: "user"|"assistant", content: [{type: "input_text"|"output_text", text: "..."}]}
+            if (cfg.url.indexOf('/v1/responses') !== -1 && payload.messages) {
+                var input = [];
+                var sysContent = null;
+                payload.messages.forEach(function(m) {
+                    if (m.role === 'system') {
+                        sysContent = typeof m.content === 'string' ? m.content :
+                            (Array.isArray(m.content) ? m.content.map(function(p) { return p.text || ''; }).join('') : '');
+                        return;
+                    }
+                    var textType = (m.role === 'assistant') ? 'output_text' : 'input_text';
+                    var contentItems = [];
+                    if (Array.isArray(m.content)) {
+                        m.content.forEach(function(p) {
+                            if (p.type === 'text') {
+                                contentItems.push({ type: textType, text: p.text || '' });
+                            } else if (p.type === 'image_url') {
+                                contentItems.push({ type: 'input_image', image_url: p.image_url.url });
+                            }
+                        });
+                    } else if (typeof m.content === 'string') {
+                        contentItems.push({ type: textType, text: m.content });
+                    }
+                    if (contentItems.length > 0) {
+                        input.push({ role: m.role, content: contentItems });
+                    }
+                });
+                if (sysContent) {
+                    input.unshift({ role: 'system', content: [{ type: 'input_text', text: sysContent }] });
+                }
+                payload.input = input;
+                delete payload.messages;
+                delete payload.system;
+            }
+
+            return {
+                url: cfg.url,
+                method: cfg.method || 'POST',
+                headers: cfg.headers,
+                body: JSON.stringify(payload),
+            };
+        }
+
+        // -----------------------------------------------------------------------
         // MESSAGE SENDING - CORE FUNCTION
         // -----------------------------------------------------------------------
 
         /**
          * Send participant message to AI and handle response
          * Supports both streaming (SSE) and non-streaming (JSON) modes
-         * 
+         *
          * @param {string} studyCode - Study identifier
          * @param {string} participantID - Participant identifier
          * @param {string} newMessage - Message text from participant
@@ -1515,7 +1812,6 @@ if ($study['dataCollectionActive'] == 0) {
 
             // Compile current chat history including the new user message
             const chatHist = compileChatHistory(true);
-            console.log(JSON.stringify(chatHist));
 
             let effectiveMessageText = newMessage;
             const lastUserTurn = [...chatHist].reverse().find(m => m.role === 'user');
@@ -1564,7 +1860,422 @@ if ($study['dataCollectionActive'] == 0) {
             numberMessages++;
 
             /* ==========================================================
-             *  AI REQUEST – three-phase architecture
+             *  E2E ENCRYPTION MODE – direct client-to-provider
+             *
+             *  When encryptionMode === 'e2e', the browser calls the AI
+             *  provider directly (no server proxy). Messages are encrypted
+             *  client-side with RSA-OAEP+AES-CBC before being sent to
+             *  the server for storage via saveE2EMessage.php.
+             * ========================================================== */
+            if (typeof encryptionMode !== 'undefined' && encryptionMode === 'e2e') {
+                // Capture image state synchronously — these get cleared at the end of sendMessage()
+                var _e2eImgURL = imgURL;
+                var _e2eFilename = uploadedFilename;
+
+                (async function() {
+                    try {
+                        // Decrypt sensitive config (API key + system prompt) first
+                        await _e2eDecryptHeaders();
+
+                        // Check if encryption is available (user has a public key)
+                        var rsaKey = null;
+                        var hasEncryption = typeof e2ePublicKeyPem !== 'undefined' && e2ePublicKeyPem;
+                        if (hasEncryption) {
+                            rsaKey = await _e2eGetPublicKey();
+                        }
+
+                        // Build E2E chat history from the already-captured chatHist
+                        // (captured before the assistant bubble was added to the DOM).
+                        // Add the current user message since E2E sends it directly to the provider.
+                        var e2eChatHist = chatHist.slice();
+                        // Build user turn: multi-part content if image is attached, plain string otherwise
+                        var userTurnContent;
+                        if (_e2eImgURL && _e2eImgURL.trim()) {
+                            userTurnContent = [];
+                            if (effectiveMessageText && effectiveMessageText.trim()) {
+                                userTurnContent.push({ type: 'text', text: effectiveMessageText });
+                            }
+                            userTurnContent.push({ type: 'image_url', image_url: { url: _e2eImgURL } });
+                        } else {
+                            userTurnContent = effectiveMessageText;
+                        }
+                        e2eChatHist.push({ role: 'user', content: userTurnContent });
+
+                        // Save participant message to server
+                        // Append attachment marker to match server-side format (prepareChat.php line 193)
+                        var msgForDb = effectiveMessageText;
+                        if (_e2eFilename) {
+                            msgForDb += ' [[Attachment: ' + _e2eFilename + ']]';
+                        }
+                        var msgToSave = hasEncryption ? await _e2eEncrypt(msgForDb, rsaKey) : msgForDb;
+                        var varsToSave = variablesString ? (hasEncryption ? await _e2eEncrypt(variablesString, rsaKey) : variablesString) : '';
+                        var e2eEncType = hasEncryption ? 'e2e' : 'NA';
+                        fetch(baseURL + 'Backend/Chat/saveE2EMessage.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                            body: new URLSearchParams({
+                                studyCode: studyCode,
+                                participantID: participantID,
+                                encryptedMsg: msgToSave,
+                                senderType: 'Participant',
+                                condition: <?php echo $conditionNumber + 1; ?>,
+                                passedVariables: varsToSave,
+                                encryptionType: e2eEncType
+                            })
+                        }).catch(function(e) { console.error('E2E save user msg failed:', e); });
+
+                        // Build request directly to AI provider
+                        var req = _e2eBuildRequest(e2eChatHist, instructions);
+
+                        if (isStreaming) {
+                            // ---- E2E STREAMING ----
+                            var baseDelayStream = Math.max(0, pickDelay(aiDelay));
+                            await new Promise(function(r) { setTimeout(r, baseDelayStream); });
+
+                            var res = await fetch(req.url, {
+                                method: req.method,
+                                headers: req.headers,
+                                body: req.body
+                            });
+
+                            if (!res.ok || !res.body) {
+                                var errText = await res.text();
+                                throw new Error(errText || ('HTTP ' + res.status));
+                            }
+
+                            var reader = res.body.getReader();
+                            var decoder = new TextDecoder('utf-8');
+                            var buffer = '';
+                            var assistantText = '';
+                            var reasoningAgg = '';
+                            var thisMsgId = messageId;
+
+                            function e2eHandleEvent(evt) {
+                                var lines = evt.replace(/\r\n/g, '\n').split('\n');
+                                for (var li = 0; li < lines.length; li++) {
+                                    var line = lines[li];
+                                    if (!line.startsWith('data: ')) continue;
+                                    var payload = line.slice(6).trim();
+                                    if (!payload || payload === '[DONE]') continue;
+                                    try {
+                                        var obj = JSON.parse(payload);
+                                    } catch(e) { continue; }
+                                    if (!obj) continue;
+
+                                    // Chat Completions format
+                                    if (obj.choices && obj.choices[0] && obj.choices[0].delta) {
+                                        var d = obj.choices[0].delta;
+                                        if (typeof d.content === 'string') {
+                                            if (!$assistantBubble.is(':visible')) { $assistantBubble.show(); $('#typing-dots').hide(); }
+                                            assistantText += d.content;
+                                            $assistantBubble.find('.text').text(assistantText);
+                                        }
+                                        if (Array.isArray(d.content)) {
+                                            for (var ci = 0; ci < d.content.length; ci++) {
+                                                var part = d.content[ci];
+                                                if (part.type === 'text' && typeof part.text === 'string') {
+                                                    if (!$assistantBubble.is(':visible')) { $assistantBubble.show(); $('#typing-dots').hide(); }
+                                                    assistantText += part.text;
+                                                    $assistantBubble.find('.text').text(assistantText);
+                                                }
+                                                // Reasoning via content array (e.g., Mistral Magistral)
+                                                // Format: {"type":"thinking","thinking":[{"type":"text","text":"..."}]}
+                                                if (part.type === 'thinking' && Array.isArray(part.thinking)) {
+                                                    for (var ti = 0; ti < part.thinking.length; ti++) {
+                                                        if (part.thinking[ti].type === 'text' && typeof part.thinking[ti].text === 'string') {
+                                                            ensureReasoningContainer(thisMsgId);
+                                                            updateReasoningText(thisMsgId, part.thinking[ti].text);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        // Reasoning fields (various provider conventions)
+                                        if (typeof d.reasoning_content === 'string' && d.reasoning_content) {
+                                            ensureReasoningContainer(thisMsgId);
+                                            updateReasoningText(thisMsgId, d.reasoning_content);
+                                        }
+                                        if (typeof d.reasoning === 'string' && d.reasoning) {
+                                            ensureReasoningContainer(thisMsgId);
+                                            updateReasoningText(thisMsgId, d.reasoning);
+                                        }
+                                        continue;
+                                    }
+
+                                    // Responses API format — text output
+                                    if (obj.type === 'response.output_text.delta' && typeof obj.delta === 'string') {
+                                        if (!$assistantBubble.is(':visible')) { $assistantBubble.show(); $('#typing-dots').hide(); }
+                                        assistantText += obj.delta;
+                                        $assistantBubble.find('.text').text(assistantText);
+                                        continue;
+                                    }
+
+                                    // Responses API — reasoning events
+                                    if (obj.type === 'response.output_item.added' && obj.item && obj.item.type === 'reasoning') {
+                                        ensureReasoningContainer(thisMsgId);
+                                        continue;
+                                    }
+                                    if (obj.type === 'response.reasoning_summary_text.delta') {
+                                        ensureReasoningContainer(thisMsgId);
+                                        reasoningPartDelta(thisMsgId, obj.item_id, obj.summary_index ?? 0, obj.delta || '');
+                                        continue;
+                                    }
+                                    if (obj.type === 'response.reasoning_summary_text.done') {
+                                        ensureReasoningContainer(thisMsgId);
+                                        reasoningPartSet(thisMsgId, obj.item_id, obj.summary_index ?? 0, obj.text || '', true);
+                                        continue;
+                                    }
+                                    if (obj.type === 'response.reasoning_summary_part.added' || obj.type === 'response.reasoning_summary_part.done') {
+                                        if (obj.part && (obj.part.type === 'output_text' || obj.part.type === 'summary_text')) {
+                                            ensureReasoningContainer(thisMsgId);
+                                            reasoningPartSet(thisMsgId, obj.item_id, obj.summary_index ?? 0, obj.part.text || '', obj.type.endsWith('.done'));
+                                        }
+                                        continue;
+                                    }
+                                    if (obj.type === 'response.reasoning.delta' && typeof obj.delta === 'string') {
+                                        ensureReasoningContainer(thisMsgId);
+                                        updateReasoningText(thisMsgId, obj.delta);
+                                        continue;
+                                    }
+                                    // Reasoning in output_item.done
+                                    if (obj.type === 'response.output_item.done' && obj.item && obj.item.type === 'reasoning') {
+                                        var rs = typeof extractReasoningSummary === 'function' ? extractReasoningSummary(obj.item.summary) : null;
+                                        if (rs) {
+                                            ensureReasoningContainer(thisMsgId);
+                                            reasoningPartSet(thisMsgId, obj.item.id, 0, rs, true);
+                                        }
+                                        continue;
+                                    }
+
+                                    // Chat Completions — reasoning fields (e.g., o1, DeepSeek, Mistral Magistral)
+                                    if (obj.choices && obj.choices[0] && obj.choices[0].delta) {
+                                        var d2 = obj.choices[0].delta;
+                                        if (typeof d2.reasoning_content === 'string' && d2.reasoning_content.trim() !== '') {
+                                            ensureReasoningContainer(thisMsgId);
+                                            updateReasoningText(thisMsgId, d2.reasoning_content);
+                                        }
+                                        if (typeof d2.reasoning === 'string' && d2.reasoning.trim() !== '') {
+                                            ensureReasoningContainer(thisMsgId);
+                                            updateReasoningText(thisMsgId, d2.reasoning);
+                                        }
+                                        // Reasoning via content array (e.g., Mistral Magistral)
+                                        if (Array.isArray(d2.content)) {
+                                            for (var mi = 0; mi < d2.content.length; mi++) {
+                                                var mp = d2.content[mi];
+                                                if (mp.type === 'thinking' && Array.isArray(mp.thinking)) {
+                                                    for (var mti = 0; mti < mp.thinking.length; mti++) {
+                                                        if (mp.thinking[mti].type === 'text' && typeof mp.thinking[mti].text === 'string') {
+                                                            ensureReasoningContainer(thisMsgId);
+                                                            updateReasoningText(thisMsgId, mp.thinking[mti].text);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Generic extractor system (custom connectors — handles Anthropic, etc.)
+                                    var e2eExtractors = (typeof e2eConfig !== 'undefined' && e2eConfig) ? e2eConfig.extractors : null;
+                                    var e2eReasoningExtractors = (typeof e2eConfig !== 'undefined' && e2eConfig) ? e2eConfig.reasoningExtractors : null;
+                                    if (e2eExtractors && Array.isArray(e2eExtractors)) {
+                                        for (var ei = 0; ei < e2eExtractors.length; ei++) {
+                                            if (_matchExtractorFilter(obj, e2eExtractors[ei].filter)) {
+                                                var token = e2eExtractors[ei].tokenPath ? _extractPath(obj, e2eExtractors[ei].tokenPath) : null;
+                                                if (typeof token === 'string' && token) {
+                                                    if (!$assistantBubble.is(':visible')) { $assistantBubble.show(); $('#typing-dots').hide(); }
+                                                    assistantText += token;
+                                                    $assistantBubble.find('.text').text(assistantText);
+                                                }
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if (e2eReasoningExtractors && Array.isArray(e2eReasoningExtractors)) {
+                                        for (var ri = 0; ri < e2eReasoningExtractors.length; ri++) {
+                                            if (_matchExtractorFilter(obj, e2eReasoningExtractors[ri].filter)) {
+                                                var rToken = e2eReasoningExtractors[ri].tokenPath ? _extractPath(obj, e2eReasoningExtractors[ri].tokenPath) : null;
+                                                if (typeof rToken === 'string' && rToken) {
+                                                    ensureReasoningContainer(thisMsgId);
+                                                    updateReasoningText(thisMsgId, rToken);
+                                                }
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    // Final response text
+                                    if (obj.type === 'response.completed' && obj.response) {
+                                        if (obj.response.output_text && !assistantText) {
+                                            assistantText = obj.response.output_text;
+                                            if (!$assistantBubble.is(':visible')) { $assistantBubble.show(); $('#typing-dots').hide(); }
+                                            $assistantBubble.find('.text').text(assistantText);
+                                        }
+                                        // Extract reasoning from completed response
+                                        if (obj.response.reasoning) {
+                                            var rs2 = typeof extractReasoningSummary === 'function' ? extractReasoningSummary(obj.response.reasoning.summary) : null;
+                                            if (rs2) {
+                                                ensureReasoningContainer(thisMsgId);
+                                                reasoningPartSet(thisMsgId, 'final', 0, rs2, true);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Read stream
+                            while (true) {
+                                var chunk = await reader.read();
+                                if (chunk.done) {
+                                    if (buffer && buffer.trim()) e2eHandleEvent(buffer);
+                                    break;
+                                }
+                                buffer += decoder.decode(chunk.value, { stream: true });
+                                buffer = buffer.replace(/\r\n/g, '\n');
+                                var idx;
+                                while ((idx = buffer.indexOf('\n\n')) !== -1) {
+                                    e2eHandleEvent(buffer.slice(0, idx));
+                                    buffer = buffer.slice(idx + 2);
+                                }
+                            }
+
+                            // Finalize reasoning display
+                            if (typeof finalizeReasoningTitle === 'function') {
+                                finalizeReasoningTitle(thisMsgId);
+                            }
+
+                            // Render markdown
+                            if (assistantText.trim()) {
+                                assistantText = assistantText.replace(/\\n/g, "\n");
+                                $assistantBubble.find('.text').html(markdownConverter.makeHtml(assistantText));
+                            }
+                            $('#typing-dots').hide();
+
+                            // Save AI response (encrypted if public key available, plaintext otherwise)
+                            var aiMsgToSave = hasEncryption ? await _e2eEncrypt(assistantText, rsaKey) : assistantText;
+                            fetch(baseURL + 'Backend/Chat/saveE2EMessage.php', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                                body: new URLSearchParams({
+                                    studyCode: studyCode,
+                                    participantID: participantID,
+                                    encryptedMsg: aiMsgToSave,
+                                    senderType: 'AI',
+                                    condition: <?php echo $conditionNumber + 1; ?>,
+                                    passedVariables: '',
+                                    encryptionType: e2eEncType
+                                })
+                            }).catch(function(e) { console.error('E2E save AI msg failed:', e); });
+
+                        } else {
+                            // ---- E2E NON-STREAMING ----
+                            var res = await fetch(req.url, {
+                                method: req.method,
+                                headers: req.headers,
+                                body: req.body
+                            });
+
+                            if (!res.ok) {
+                                var errText = await res.text();
+                                throw new Error(errText || ('HTTP ' + res.status));
+                            }
+
+                            var aiJson = await res.json();
+
+                            // Extract AI message (same fallback logic as server-side path)
+                            var rawMsg = e2eConfig.resultPath ? _extractPath(aiJson, e2eConfig.resultPath) : null;
+                            if (rawMsg == null && typeof aiJson.output_text === 'string') rawMsg = aiJson.output_text;
+                            if (rawMsg == null && aiJson.choices && aiJson.choices[0] && aiJson.choices[0].message) {
+                                rawMsg = aiJson.choices[0].message.content;
+                            }
+                            if (rawMsg == null && Array.isArray(aiJson.output)) {
+                                for (var oi = 0; oi < aiJson.output.length; oi++) {
+                                    var item = aiJson.output[oi];
+                                    if (item && item.type === 'message' && Array.isArray(item.content)) {
+                                        for (var ci2 = 0; ci2 < item.content.length; ci2++) {
+                                            if (item.content[ci2] && item.content[ci2].type === 'output_text') {
+                                                rawMsg = item.content[ci2].text;
+                                                break;
+                                            }
+                                        }
+                                        if (rawMsg != null) break;
+                                    }
+                                }
+                            }
+                            // Anthropic format
+                            if (rawMsg == null && Array.isArray(aiJson.content)) {
+                                for (var ai2 = 0; ai2 < aiJson.content.length; ai2++) {
+                                    if (aiJson.content[ai2].type === 'text') {
+                                        rawMsg = aiJson.content[ai2].text;
+                                        break;
+                                    }
+                                }
+                            }
+                            var msgText = (typeof rawMsg === 'string') ? rawMsg : (rawMsg != null ? JSON.stringify(rawMsg) : '');
+
+                            // Display with delay
+                            var baseDelay = Math.max(0, pickDelay(aiDelay));
+                            var perCharEnabled = (aiDelayIsPerCharacter === 1);
+                            var delayMs = perCharEnabled && baseDelay > 0 ? baseDelay * msgText.length : baseDelay;
+
+                            if ($assistantBubble.is(':hidden')) $("#typing-dots").show();
+                            await new Promise(function(r) { setTimeout(r, delayMs); });
+
+                            if ($assistantBubble.is(':hidden')) { $assistantBubble.show(); $("#typing-dots").hide(); }
+                            msgText = msgText.replace(/\\n/g, "\n");
+                            $assistantBubble.find('.text').html(markdownConverter.makeHtml(msgText));
+
+                            // Save AI response (encrypted if public key available, plaintext otherwise)
+                            var aiMsgToSave2 = hasEncryption ? await _e2eEncrypt(msgText, rsaKey) : msgText;
+                            fetch(baseURL + 'Backend/Chat/saveE2EMessage.php', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                                body: new URLSearchParams({
+                                    studyCode: studyCode,
+                                    participantID: participantID,
+                                    encryptedMsg: aiMsgToSave2,
+                                    senderType: 'AI',
+                                    condition: <?php echo $conditionNumber + 1; ?>,
+                                    passedVariables: '',
+                                    encryptionType: e2eEncType
+                                })
+                            }).catch(function(e) { console.error('E2E save AI msg failed:', e); });
+                        }
+
+                        // Re-enable input
+                        aiMessageCount++;
+                        var lockedAi = maybeLockIfLimitReached();
+                        var lockedUser = maybeLockIfUserLimitReached();
+                        if (!lockedAi && !lockedUser) {
+                            $('#message-textfield').prop('disabled', false).focus();
+                        }
+                        $('#typing-dots').hide();
+
+                    } catch (err) {
+                        console.error('E2E request failed:', err);
+                        $('#typing-dots').hide();
+                        $assistantBubble.find('.text').text('Request failed. Please try again.');
+                        $('#message-textfield').prop('disabled', false).focus();
+                        var msg = 'Your message could not be sent. Please try again.';
+                        try {
+                            var parsed = JSON.parse(err.message);
+                            if (parsed.error) msg = 'Error: ' + (typeof parsed.error === 'string' ? parsed.error : parsed.error.message || JSON.stringify(parsed.error));
+                        } catch (_) {
+                            if (err.message) msg = 'Error: ' + err.message;
+                        }
+                        alert(msg);
+                    }
+                })();
+
+                // Reset upload state and return early (E2E path handles everything)
+                imgURL = '';
+                uploadedFilename = '';
+                window.thumbnailAppended = false;
+                resetUpload();
+                return;
+            }
+
+            /* ==========================================================
+             *  AI REQUEST – three-phase architecture (SERVER-SIDE MODE)
              *
              *  Both streaming and non-streaming go through:
              *    1. prepareChat.php  → saves user msg, returns token
@@ -2004,7 +2715,7 @@ if ($study['dataCollectionActive'] == 0) {
                                             condition: _saveCondition,
                                             passedVariables: _savePassedVars
                                         });
-                                        console.log("Saving AI response with params:", saveParams.toString());
+                                        // Save AI response to database
                                         fetch(baseURL + 'Backend/Chat/saveResponse.php', {
                                             method: 'POST',
                                             headers: {
@@ -2395,7 +3106,6 @@ if ($study['dataCollectionActive'] == 0) {
                 content: instructions
             });
 
-            console.log(chatHistory);
             return chatHistory;
         }
 
@@ -2683,40 +3393,63 @@ if ($study['dataCollectionActive'] == 0) {
             //     return;
             //}
 
-            //Send post request
-            $.post('Backend/Studies/submission-save.php', {
-                submissionText: newSubmission,
-                studyCode: studyCode,
-                participantID: participantID,
-                startTime: startTime.toISOString().slice(0, 19).replace('T', ' '),
-                endTime: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                passedVariables: variablesString,
-                numberMessages: numberMessages,
-                duration: ((new Date() - startTime) / 1000).toString(),
-                condition: <?php echo $conditionNumber + 1; ?>
-            }, function(data) {
-                console.log(data);
+            // Build submission payload, encrypting client-side for E2E
+            async function sendSubmission() {
+                var submissionText = newSubmission;
+                var passedVars = variablesString;
 
-                // Check if taskSubmissionTextarea exists
-                if (tinymce.get("taskSubmissionTextarea") !== null) {
-                    // Clear the text input
-                    tinymce.get("taskSubmissionTextarea").setContent("");
+                // E2E: encrypt submission text and passed variables in the browser (only if public key available)
+                if (typeof encryptionMode !== 'undefined' && encryptionMode === 'e2e'
+                    && typeof e2ePublicKeyPem !== 'undefined' && e2ePublicKeyPem) {
+                    try {
+                        var rsaKey = await _e2eGetPublicKey();
+                        submissionText = await _e2eEncrypt(newSubmission, rsaKey);
+                        if (passedVars) {
+                            passedVars = await _e2eEncrypt(passedVars, rsaKey);
+                        }
+                    } catch (e) {
+                        console.error('E2E encryption of submission failed:', e);
+                        alert('Encryption failed. Please try again.');
+                        return;
+                    }
                 }
 
-                var redirectURL = "<?php echo getStudyValue("redirectURL", ""); ?>";
-                if (redirectURL !== "") {
-                    // Append all participantID + Condition + all other potentially passed variables
-                    redirectURL += "?participantID=" + participantID + "&condition=<?php echo $conditionNumber + 1; ?>&" + variablesString;
-                    window.location.href = redirectURL;
-                } else {
-                    window.location.href = "done.html";
-                }
+                $.post('Backend/Studies/submission-save.php', {
+                    submissionText: submissionText,
+                    studyCode: studyCode,
+                    participantID: participantID,
+                    startTime: startTime.toISOString().slice(0, 19).replace('T', ' '),
+                    endTime: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                    passedVariables: passedVars,
+                    numberMessages: numberMessages,
+                    duration: ((new Date() - startTime) / 1000).toString(),
+                    condition: <?php echo $conditionNumber + 1; ?>
+                }, function(data) {
+                    console.log(data);
 
-            }).fail(function(data) {
-                alert("Something went wrong. Please try again.")
-                console.log(data);
-                console.log(data.responseText);
-            });
+                    // Check if taskSubmissionTextarea exists
+                    if (tinymce.get("taskSubmissionTextarea") !== null) {
+                        // Clear the text input
+                        tinymce.get("taskSubmissionTextarea").setContent("");
+                    }
+
+                    var redirectURL = "<?php echo getStudyValue("redirectURL", ""); ?>";
+                    if (redirectURL !== "") {
+                        // Append all participantID + Condition + all other potentially passed variables
+                        redirectURL += "?participantID=" + participantID + "&condition=<?php echo $conditionNumber + 1; ?>&" + variablesString;
+                        window.location.href = redirectURL;
+                    } else {
+                        window.location.href = "done.html";
+                    }
+
+                }).fail(function(data) {
+                    alert("Something went wrong. Please try again.")
+                    console.log(data);
+                    console.log(data.responseText);
+                });
+            }
+
+            sendSubmission();
         }
     </script>
 

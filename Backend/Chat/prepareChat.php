@@ -200,6 +200,8 @@ $passedVarsToStore = (!empty($study['isEncrypted']) && $publicKey)
     ? encryptMessageWithPublicKey($passedVariables, $publicKey)
     : $passedVariables;
 
+$encryptionType = (!empty($study['isEncrypted']) && $publicKey) ? 'server' : 'NA';
+
 $database->insert('messages', [
     'participantID'   => $participantID,
     'studyID'         => $study['studyID'],
@@ -208,6 +210,7 @@ $database->insert('messages', [
     'messageDateTime' => date('Y-m-d H:i:s'),
     'condition'       => $condition,
     'passedVariables' => $passedVarsToStore,
+    'encryptionType'  => $encryptionType,
 ]);
 $messageID = $database->id();
 
@@ -301,6 +304,7 @@ $configData = [
     'timeoutMs' => (int) ($req['timeoutMs'] ?? 60000),
 ];
 
+error_log("[SERVER DEBUG] Payload: " . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
 error_log("CONFIG DIR: " . $configDir);
 error_log("CONFIG PATH: " . $configFile);
 error_log("DIR EXISTS: " . (is_dir($configDir) ? 'YES' : 'NO'));

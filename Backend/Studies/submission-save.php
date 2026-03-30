@@ -318,6 +318,7 @@ function getStudy(Medoo $database, string $studyCode)
         $study = $database->get('studies', [
             'studyID',
             'isEncrypted',
+            'encryptionMode',
             'studyOwner',
             'dataCollectionActive'
         ], [
@@ -360,30 +361,43 @@ function saveSubmission(Medoo $database, array $study, array $data): bool
                 'userID' => $study['studyOwner']
             ]);
         }
-        
-        // Encrypt submission text if encryption is enabled
+
+        // Determine encryption mode
+        $isE2E = ($study['encryptionMode'] ?? 'server') === 'e2e';
+
         $submissionTextToStore = $data['submissionText'];
-        if (!empty($study['isEncrypted']) && $publicKey) {
+        $passedVariablesToStore = $data['passedVariables'];
+
+        if ($isE2E) {
+            // E2E mode: data arrives pre-encrypted from the browser — store as-is
+            // No server-side encryption needed
+        } elseif (!empty($study['isEncrypted']) && $publicKey) {
+            // Server-side encryption: encrypt on the server
             $encrypted = encryptMessageWithPublicKey($submissionTextToStore, $publicKey);
             if ($encrypted !== false) {
                 $submissionTextToStore = $encrypted;
             } else {
                 error_log("Failed to encrypt submission text for study {$study['studyID']}");
             }
-        }
-        
-        // Encrypt passed variables if encryption is enabled
-        $passedVariablesToStore = $data['passedVariables'];
-        if (!empty($study['isEncrypted']) && $publicKey && $passedVariablesToStore !== null) {
-            $encrypted = encryptMessageWithPublicKey($passedVariablesToStore, $publicKey);
-            if ($encrypted !== false) {
-                $passedVariablesToStore = $encrypted;
-            } else {
-                error_log("Failed to encrypt passed variables for study {$study['studyID']}");
+
+            if ($passedVariablesToStore !== null) {
+                $encrypted = encryptMessageWithPublicKey($passedVariablesToStore, $publicKey);
+                if ($encrypted !== false) {
+                    $passedVariablesToStore = $encrypted;
+                } else {
+                    error_log("Failed to encrypt passed variables for study {$study['studyID']}");
+                }
             }
         }
-        
-        // Insert submission
+
+        // Determine encryption type for this submission
+        $encryptionType = 'NA';
+        if ($isE2E) {
+            $encryptionType = 'e2e';
+        } elseif (!empty($study['isEncrypted']) && $publicKey) {
+            $encryptionType = 'server';
+        }
+
         $database->insert('submissions', [
             'participantID'    => $data['participantID'],
             'studyID'          => $study['studyID'],
@@ -393,7 +407,8 @@ function saveSubmission(Medoo $database, array $study, array $data): bool
             'passedVariables'  => $passedVariablesToStore,
             'startTime'        => $data['startTime'],
             'submissionTime'   => $data['endTime'],
-            'duration'         => $data['duration']
+            'duration'         => $data['duration'],
+            'encryptionType'   => $encryptionType,
         ]);
         
         $insertedID = $database->id();
