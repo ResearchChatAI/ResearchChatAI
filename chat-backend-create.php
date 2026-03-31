@@ -1417,9 +1417,13 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
             <div class="field mt-5">
               <label class="label has-text-left" id="openRouterModelLabel">OpenRouter Model</label>
               <div class="control">
-                <input class="input trackChanges" fieldKey="openrouterModel" saveIndicatorElement="#openRouterModelLabel" type="text"
-                  placeholder="e.g., anthropic/claude-3.5-sonnet" value="<?php echo $study["openrouterModel"]; ?>" style="max-width: 450px;">
-                <p class="help">Note: You can use any model offered by OpenRouter. Simply provide here the full model name, such as "nvidia/llama-3.1-nemotron-70b-instruct" or "google/gemini-flash-1.5-8b". See a full list of models offered by OpenRouter here: <a href="https://openrouter.ai/docs/models" target="_blank">https://openrouter.ai/docs/models</a>. Please be aware that model names might change and that this will require you to update the name here.</p>
+                <div style="position: relative; max-width: 450px; display: inline-block; width: 100%;">
+                  <input id="openrouterModelInput" class="input trackChanges" fieldKey="openrouterModel" saveIndicatorElement="#openRouterModelLabel" type="text"
+                    placeholder="e.g., anthropic/claude-3.5-sonnet" value="<?php echo $study["openrouterModel"]; ?>" autocomplete="off">
+                  <div id="orModelDropdown" style="display:none; position:absolute; left:0; right:0; top:100%; z-index:50; max-height:250px; overflow-y:auto; background:#fff; border:1px solid #dbdbdb; border-top:none; border-radius:0 0 4px 4px; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+                  </div>
+                </div>
+                <p class="help">Note: You can use any model offered by OpenRouter. Start typing to search from all available models. See a full list at <a href="https://openrouter.ai/models" target="_blank">https://openrouter.ai/models</a>. Please be aware that model names might change and that this will require you to update the name here.</p>
                 <p class="mt-3" style="font-size: 0.85rem;">
                   <span class="has-text-grey-dark has-text-weight-semibold">Popular models:</span>
                   <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">anthropic/claude-opus-4.6</span>
@@ -2914,9 +2918,84 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
       // Popular OpenRouter model tags - click to select
       $('.or-model-tag').on('click', function() {
         var modelName = $(this).text().trim();
-        var $input = $('input[fieldKey="openrouterModel"]');
+        var $input = $('#openrouterModelInput');
         $input.val(modelName).trigger('change');
+        $('#orModelDropdown').hide();
       });
+
+      // OpenRouter model autocomplete
+      (function() {
+        var orModels = null;
+        var $input = $('#openrouterModelInput');
+        var $dropdown = $('#orModelDropdown');
+        var selectedIndex = -1;
+
+        function fetchModels(callback) {
+          if (orModels !== null) return callback(orModels);
+          $.getJSON('https://openrouter.ai/api/v1/models', function(data) {
+            orModels = (data.data || []).map(function(m) { return m.id; }).sort();
+            callback(orModels);
+          }).fail(function() {
+            orModels = [];
+            callback(orModels);
+          });
+        }
+
+        function showResults(query) {
+          if (!query || query.length < 2) { $dropdown.hide(); return; }
+          fetchModels(function(models) {
+            var q = query.toLowerCase();
+            var matches = models.filter(function(m) { return m.toLowerCase().indexOf(q) !== -1; });
+            if (matches.length === 0) { $dropdown.hide(); return; }
+            if (matches.length > 50) matches = matches.slice(0, 50);
+            selectedIndex = -1;
+            var html = '';
+            for (var i = 0; i < matches.length; i++) {
+              html += '<div class="or-ac-item" data-index="' + i + '" style="padding:6px 12px; cursor:pointer; font-size:0.9rem; border-bottom:1px solid #f5f5f5;">' + matches[i] + '</div>';
+            }
+            $dropdown.html(html).show();
+
+            $dropdown.find('.or-ac-item').on('mousedown', function(e) {
+              e.preventDefault();
+              $input.val($(this).text()).trigger('change');
+              $dropdown.hide();
+            }).on('mouseenter', function() {
+              $dropdown.find('.or-ac-item').css({ backgroundColor: '', color: '' });
+              $(this).css({ backgroundColor: '#3273dc', color: '#fff' });
+              selectedIndex = parseInt($(this).data('index'));
+            }).on('mouseleave', function() {
+              $(this).css({ backgroundColor: '', color: '' });
+            });
+          });
+        }
+
+        $input.on('input', function() { showResults($(this).val().trim()); });
+        $input.on('focus', function() { if ($(this).val().trim().length >= 2) showResults($(this).val().trim()); });
+        $input.on('blur', function() { $dropdown.hide(); });
+        $input.on('keydown', function(e) {
+          var $items = $dropdown.find('.or-ac-item');
+          if (!$dropdown.is(':visible') || $items.length === 0) return;
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            selectedIndex = Math.min(selectedIndex + 1, $items.length - 1);
+            $items.css({ backgroundColor: '', color: '' });
+            $items.eq(selectedIndex).css({ backgroundColor: '#3273dc', color: '#fff' });
+            $items.eq(selectedIndex)[0].scrollIntoView({ block: 'nearest' });
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            selectedIndex = Math.max(selectedIndex - 1, 0);
+            $items.css({ backgroundColor: '', color: '' });
+            $items.eq(selectedIndex).css({ backgroundColor: '#3273dc', color: '#fff' });
+            $items.eq(selectedIndex)[0].scrollIntoView({ block: 'nearest' });
+          } else if (e.key === 'Enter' && selectedIndex >= 0) {
+            e.preventDefault();
+            $input.val($items.eq(selectedIndex).text()).trigger('change');
+            $dropdown.hide();
+          } else if (e.key === 'Escape') {
+            $dropdown.hide();
+          }
+        });
+      })();
 
       // Listen for changes to the input fields with the class .trackChanges
       // -----------------------------------------------------------------------
