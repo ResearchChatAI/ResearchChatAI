@@ -216,6 +216,11 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
   <link rel="stylesheet" href="src/CSS/mb.colorPicker.css">
 
   <style>
+    .or-model-tag:hover {
+      background-color: #3273dc !important;
+      color: #fff !important;
+    }
+
     /* Hide the labels in all rows for the passed variable, only for the first one show them */
     #passedVariablesList .columns label,
     #previewPassedVariablesList .columns label,
@@ -1415,6 +1420,26 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
                 <input class="input trackChanges" fieldKey="openrouterModel" saveIndicatorElement="#openRouterModelLabel" type="text"
                   placeholder="e.g., anthropic/claude-3.5-sonnet" value="<?php echo $study["openrouterModel"]; ?>" style="max-width: 450px;">
                 <p class="help">Note: You can use any model offered by OpenRouter. Simply provide here the full model name, such as "nvidia/llama-3.1-nemotron-70b-instruct" or "google/gemini-flash-1.5-8b". See a full list of models offered by OpenRouter here: <a href="https://openrouter.ai/docs/models" target="_blank">https://openrouter.ai/docs/models</a>. Please be aware that model names might change and that this will require you to update the name here.</p>
+                <p class="mt-3" style="font-size: 0.85rem;">
+                  <span class="has-text-grey-dark has-text-weight-semibold">Popular models:</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">anthropic/claude-opus-4.6</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">anthropic/claude-sonnet-4.6</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">deepseek/deepseek-v3.2</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">google/gemini-2.5-flash</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">google/gemini-2.5-flash-lite</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">google/gemini-3-flash-preview</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">meta-llama/llama-3.1-8b-instruct</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">minimax/minimax-m2.5</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">minimax/minimax-m2.7</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">mistralai/mistral-nemo</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">nvidia/nemotron-3-super-120b-a12b:free</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">qwen/qwen3.5-flash-02-23</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">x-ai/grok-4.1-fast</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">x-ai/grok-4.20-beta</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">xiaomi/mimo-v2-omni</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">xiaomi/mimo-v2-pro</span>
+                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">z-ai/glm-5-turbo</span>
+                </p>
               </div>
             </div>
 
@@ -2885,6 +2910,13 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
       updateDistributionLink();
       refreshExperimentalConditionSelect();
       conductPrelaunchCheck();
+
+      // Popular OpenRouter model tags - click to select
+      $('.or-model-tag').on('click', function() {
+        var modelName = $(this).text().trim();
+        var $input = $('input[fieldKey="openrouterModel"]');
+        $input.val(modelName).trigger('change');
+      });
 
       // Listen for changes to the input fields with the class .trackChanges
       // -----------------------------------------------------------------------
