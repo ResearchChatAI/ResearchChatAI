@@ -181,8 +181,10 @@ $numberSubmissions = $database->count("submissions", ["studyID" => $studyID]);
 // =============================================================================
 
 $displayStudyName = htmlspecialchars($study["studyName"] ?? '', ENT_QUOTES, 'UTF-8');
-$displayUserName = htmlspecialchars($user["userName"] ?? '', ENT_QUOTES, 'UTF-8');
-$displayUserSurname = htmlspecialchars($user["userSurname"] ?? '', ENT_QUOTES, 'UTF-8');
+$user["userName"] = decryptString($user["userName"] ?? '');
+$user["userSurname"] = decryptString($user["userSurname"] ?? '');
+$displayUserName = htmlspecialchars($user["userName"], ENT_QUOTES, 'UTF-8');
+$displayUserSurname = htmlspecialchars($user["userSurname"], ENT_QUOTES, 'UTF-8');
 $displayFullName = $displayUserName . ' ' . $displayUserSurname;
 $safeStudyCode = htmlspecialchars($study["studyCode"] ?? '', ENT_QUOTES, 'UTF-8');
 $safeCsrfToken = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
@@ -1651,13 +1653,13 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
           </div>
           <div id="followUpEncryptionE2E" class="followUpContainer mt-3 mb-5"
             <?php echo (($study["encryptionMode"] ?? 'server') != "e2e") ? "style='display:none;'" : ""; ?>>
-            <div class="notification is-light is-success">
+            <div class="notification is-light is-info">
               <p>
                 <strong><i class="fa fa-lock mr-1"></i> How it works:</strong>
                 Messages are sent <strong>directly from the participant&rsquo;s device to the AI provider</strong>, completely bypassing the ResearchChatAI server. Before any data is sent back to ResearchChatAI for storage, it is encrypted on the participant&rsquo;s device using your public key. This means that we as platform operators <strong>can never, at any point, see the messages in plain text</strong>.
               </p>
             </div>
-            <div class="notification is-light is-info mt-3">
+            <div class="notification is-light is-danger mt-3">
               <p>
                 <strong><i class="fa fa-exclamation-triangle mr-1"></i> Important: API Key Exposure Risk</strong>
               </p>
@@ -2013,7 +2015,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
 
         <div class="field mt-5">
           <label class="checkbox">
-            <input type="checkbox" class="trackChanges mbToggle" fieldKey="enableImageUpload" saveIndicatorElement="#chatSettingsTitle" <?php echo ($study["enableImageUpload"] == 1) ? "checked" : ""; ?> mbtoggletargets="#imageUploadInfoBox, #modelSupportWarningBox" mbToggleCheckedAction="show" />
+            <input type="checkbox" class="trackChanges mbToggle" fieldKey="enableImageUpload" saveIndicatorElement="#chatSettingsTitle" <?php echo ($study["enableImageUpload"] == 1) ? "checked" : ""; ?> mbtoggletargets="#imageUploadInfoBox, #modelSupportWarningBox, #imageEncryptionNoteBox" mbToggleCheckedAction="show" />
             Enable image upload
           </label>
           <div class="mbHelpBox display notification is-danger is-light mt-5" id="imageUploadInfoBox" <?php echo ($study["enableImageUpload"] == 1) ? "" : "style='display: none;'"; ?>>
@@ -2037,6 +2039,18 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               </div>
               <div class="column">
                 <p><b>Important note:</b> Not all AI models support image uploads. Please ensure you check and test your model's compatibility before relying on this feature.</p>
+              </div>
+            </div>
+          </div>
+          <div class="mbHelpBox display notification is-warning is-light mt-5" id="imageEncryptionNoteBox" <?php echo ($study["enableImageUpload"] == 1) ? "" : "style='display: none;'"; ?>>
+            <div class="columns">
+              <div class="column colWithIcon">
+                <span class="icon">
+                  <i class="fa fa-info-circle"></i>
+                </span>
+              </div>
+              <div class="column">
+                <p><b>Important note:</b> Uploaded images are stored as-is and are <b>not encrypted</b>, regardless of your encryption settings.</p>
               </div>
             </div>
           </div>

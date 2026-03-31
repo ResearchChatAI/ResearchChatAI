@@ -75,10 +75,6 @@ if (ini_get('session.use_cookies')) {
 // Destroy the session data on the server
 session_destroy();
 
-// Regenerate session ID for any new session (defense in depth)
-session_start();
-session_regenerate_id(true);
-
 ?>
 <!DOCTYPE html>
 <html lang="en">

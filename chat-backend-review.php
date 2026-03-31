@@ -408,7 +408,7 @@ $safeCsrfToken = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
                 "*",
                 [
                     "studyID" => $studyID,
-                    "ORDER"   => ["messageDateTime" => "DESC"],
+                    "ORDER"   => ["messageID" => "DESC"],
                     "LIMIT"   => [$messagesOffset, $itemsPerPage]
                 ]
             );
@@ -660,7 +660,7 @@ $safeCsrfToken = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
                 "*",
                 [
                     "studyID" => $studyID,
-                    "ORDER"   => ["submissionTime" => "DESC"],
+                    "ORDER"   => ["submissionID" => "DESC"],
                     "LIMIT"   => [$submissionsOffset, $itemsPerPage]
                 ]
             );
@@ -1617,100 +1617,56 @@ $safeCsrfToken = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
                 var searchQuery = $(this).val().toLowerCase();
                 $('#participantTableFilterModalMessages tr').each(function() {
                     var participantName = $(this).find('td:first').text().toLowerCase();
-                    if (participantName.includes(searchQuery)) {
-                        $(this).show();
-                    } else {
-                        $(this).hide();
-                    }
+                    $(this).toggle(participantName.includes(searchQuery));
                 });
             });
 
-            // Uncheck all participants button logic
+            // Uncheck/check all participants toggle
             $('#uncheckAllParticipantsButton').click(function() {
-                // Check if all checkboxes are already unchecked
-                var allUnchecked = true;
-                $('#participantTableFilterModalMessages input[type="checkbox"]').each(function() {
-                    if ($(this).prop('checked')) {
-                        allUnchecked = false;
-                    }
-                });
-                // If all are unchecked, check all
-                if (allUnchecked) {
-                    $('#participantTableFilterModalMessages input[type="checkbox"]').prop('checked', true);
-                } else {
-                    $('#participantTableFilterModalMessages input[type="checkbox"]').prop('checked', false);
-                }
+                var anyChecked = $('#participantTableFilterModalMessages input[type="checkbox"]:checked').length > 0;
+                $('#participantTableFilterModalMessages input[type="checkbox"]').prop('checked', !anyChecked);
             });
 
-            // Listen for click on apply filter button and apply filter to messagesTable
+            // Apply filter to messagesTable
             $('#applyFilterButtonFilterModalMessages').click(function() {
-                // Get selected participants
                 var selectedParticipants = [];
-                $('#participantTableFilterModalMessages input[type="checkbox"]').each(function() {
-                    if ($(this).prop('checked')) {
-                        selectedParticipants.push($(this).closest('tr').find('td:first').text());
-                    }
-                });
-                // Get selected message types
-                var selectedMessageTypes = [];
-                $('#filterModalMessages input[name="messageType"]').each(function() {
-                    if ($(this).prop('checked')) {
-                        selectedMessageTypes.push($(this).val());
-                    }
+                $('#participantTableFilterModalMessages input[type="checkbox"]:checked').each(function() {
+                    selectedParticipants.push($(this).closest('tr').find('td:first').text());
                 });
 
-                // Hide all rows
-                $('#messagesTable tbody tr').hide();
-                // Show rows that match the filter
+                var selectedMessageTypes = [];
+                $('#filterModalMessages input[name="messageType"]:checked').each(function() {
+                    selectedMessageTypes.push($(this).val());
+                });
+
                 $('#messagesTable tbody tr').each(function() {
                     var participantID = $(this).find('td:nth-child(2)').text();
-                    var messageType = $(this).find('td:nth-child(5)').text();
-                    // Convert messageType to a value that matches the filter
-                    if (messageType === 'AI') {
-                        messageType = 'aiMessages';
-                    } else {
-                        messageType = 'participantMessages';
-                    }
-                    if (selectedParticipants.includes(participantID) && selectedMessageTypes.includes(messageType)) {
-                        $(this).show();
-                    }
+                    var senderType = $(this).find('td:nth-child(6)').text().trim();
+                    var messageType = (senderType === 'AI') ? 'aiMessages' : 'participantMessages';
+                    $(this).toggle(selectedParticipants.includes(participantID) && selectedMessageTypes.includes(messageType));
                 });
 
-                // Check if any rows are hidden because of filters
-                if ($('#messagesTable tbody tr:visible').length !== $('#messagesTable tbody tr').length) {
-                    $('#filterWarningMessages').show();
-                } else {
-                    $('#filterWarningMessages').hide();
-                }
-
-                // Close the modal
+                var anyHidden = $('#messagesTable tbody tr:hidden').length > 0;
+                $('#filterWarningMessages').toggle(anyHidden);
                 $('#filterModalMessages').removeClass('is-active');
             });
 
-            // Listen for click on reset filter button
-            $('#resetFilterMessages').click(function() {
-                // Reset checkboxes and search field
+            // Reset filter (from warning banner)
+            $('#resetFilterMessages').click(function(e) {
+                e.preventDefault();
                 $('#filterModalMessages input[type="checkbox"]').prop('checked', true);
-                // Clear search field
-                $('#filterModalMessages #participantSearchFilterModalMessages').val('');
-                // Show all rows
+                $('#participantSearchFilterModalMessages').val('');
+                $('#participantTableFilterModalMessages tr').show();
                 $('#messagesTable tbody tr').show();
-                // Hide filter warning
                 $('#filterWarningMessages').hide();
             });
 
-            // Reset button logic
+            // Reset button inside modal
             $('#resetButtonFilterModalMessages').click(function() {
-                console.log('Resetting filter');
-                console.log($('#participantSearchFilterModalMessages'));
-                // Clear checkboxes and search field
                 $('#filterModalMessages input[type="checkbox"]').prop('checked', true);
-                // Set message type checkboxes to checked
                 $('#filterModalMessages input[name="messageType"]').prop('checked', true);
-                // Clear search field
-                $('#filterModalMessages #participantSearchFilterModalMessages').val('');
-                // Show all rows
-                $('#filterModalMessages tr').show();
+                $('#participantSearchFilterModalMessages').val('');
+                $('#participantTableFilterModalMessages tr').show();
             });
         });
 
@@ -1719,66 +1675,53 @@ $safeCsrfToken = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
         ////////////////////////////////////////
 
         $(document).ready(function() {
-            // Filter Modal Logic for Submissions Table
+            // Search participant logic
             $('#participantSearchFilterModalSubmissions').on('input', function() {
                 var searchQuery = $(this).val().toLowerCase();
                 $('#participantTableFilterModalSubmissions tr').each(function() {
                     var participantName = $(this).find('td:first').text().toLowerCase();
-                    if (participantName.includes(searchQuery)) {
-                        $(this).show();
-                    } else {
-                        $(this).hide();
-                    }
+                    $(this).toggle(participantName.includes(searchQuery));
                 });
             });
 
-            // Apply Filter Button
+            // Uncheck/check all participants toggle
+            $('#uncheckAllParticipantsButtonSubmissions').click(function() {
+                var anyChecked = $('#participantTableFilterModalSubmissions input[type="checkbox"]:checked').length > 0;
+                $('#participantTableFilterModalSubmissions input[type="checkbox"]').prop('checked', !anyChecked);
+            });
+
+            // Apply filter to submissionsTable
             $('#applyFilterButtonFilterModalSubmissions').click(function() {
                 var selectedParticipants = [];
-                $('#participantTableFilterModalSubmissions input[type="checkbox"]').each(function() {
-                    if ($(this).prop('checked')) {
-                        selectedParticipants.push($(this).closest('tr').find('td:first').text());
-                    }
+                $('#participantTableFilterModalSubmissions input[type="checkbox"]:checked').each(function() {
+                    selectedParticipants.push($(this).closest('tr').find('td:first').text());
                 });
 
-                $('#submissionsTable tbody tr').hide();
                 $('#submissionsTable tbody tr').each(function() {
                     var participantID = $(this).find('td:nth-child(2)').text();
-                    if (selectedParticipants.includes(participantID)) {
-                        $(this).show();
-                    }
+                    $(this).toggle(selectedParticipants.includes(participantID));
                 });
 
-                if ($('#submissionsTable tbody tr:visible').length !== $('#submissionsTable tbody tr').length) {
-                    $('#filterWarningSubmissions').show();
-                } else {
-                    $('#filterWarningSubmissions').hide();
-                }
-
+                var anyHidden = $('#submissionsTable tbody tr:hidden').length > 0;
+                $('#filterWarningSubmissions').toggle(anyHidden);
                 $('#filterModalSubmissions').removeClass('is-active');
             });
 
-            // Reset Filter Button
-            $('#resetFilterSubmissions').click(function() {
+            // Reset filter (from warning banner)
+            $('#resetFilterSubmissions').click(function(e) {
+                e.preventDefault();
                 $('#filterModalSubmissions input[type="checkbox"]').prop('checked', true);
-                $('#filterModalSubmissions #participantSearchFilterModalSubmissions').val('');
+                $('#participantSearchFilterModalSubmissions').val('');
+                $('#participantTableFilterModalSubmissions tr').show();
                 $('#submissionsTable tbody tr').show();
                 $('#filterWarningSubmissions').hide();
             });
 
-            // Uncheck All Button Logic
-            $('#uncheckAllParticipantsButtonSubmissions').click(function() {
-                var allUnchecked = true;
-                $('#participantTableFilterModalSubmissions input[type="checkbox"]').each(function() {
-                    if ($(this).prop('checked')) {
-                        allUnchecked = false;
-                    }
-                });
-                if (allUnchecked) {
-                    $('#participantTableFilterModalSubmissions input[type="checkbox"]').prop('checked', true);
-                } else {
-                    $('#participantTableFilterModalSubmissions input[type="checkbox"]').prop('checked', false);
-                }
+            // Reset button inside modal
+            $('#resetButtonFilterModalSubmissions').click(function() {
+                $('#filterModalSubmissions input[type="checkbox"]').prop('checked', true);
+                $('#participantSearchFilterModalSubmissions').val('');
+                $('#participantTableFilterModalSubmissions tr').show();
             });
         });
     </script>

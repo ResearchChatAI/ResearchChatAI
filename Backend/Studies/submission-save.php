@@ -362,17 +362,17 @@ function saveSubmission(Medoo $database, array $study, array $data): bool
             ]);
         }
 
-        // Determine encryption mode
-        $isE2E = ($study['encryptionMode'] ?? 'server') === 'e2e';
+        // Check if submission was pre-encrypted client-side
+        $clientEncType = $data['encryptionType'] ?? null;
+        $isPreEncrypted = ($clientEncType === 'e2e');
 
         $submissionTextToStore = $data['submissionText'];
         $passedVariablesToStore = $data['passedVariables'];
 
-        if ($isE2E) {
-            // E2E mode: data arrives pre-encrypted from the browser — store as-is
-            // No server-side encryption needed
+        if ($isPreEncrypted) {
+            // Data arrives pre-encrypted from the browser — store as-is
         } elseif (!empty($study['isEncrypted']) && $publicKey) {
-            // Server-side encryption: encrypt on the server
+            // Fallback: server-side encryption if client didn't encrypt
             $encrypted = encryptMessageWithPublicKey($submissionTextToStore, $publicKey);
             if ($encrypted !== false) {
                 $submissionTextToStore = $encrypted;
@@ -392,7 +392,7 @@ function saveSubmission(Medoo $database, array $study, array $data): bool
 
         // Determine encryption type for this submission
         $encryptionType = 'NA';
-        if ($isE2E) {
+        if ($isPreEncrypted) {
             $encryptionType = 'e2e';
         } elseif (!empty($study['isEncrypted']) && $publicKey) {
             $encryptionType = 'server';
@@ -524,7 +524,8 @@ $validatedData = [
     'passedVariables'  => $passedVariablesValidation['sanitized'],
     'startTime'        => $startTimeValidation['sanitized'],
     'endTime'          => $endTimeValidation['sanitized'],
-    'duration'         => $durationValidation['sanitized']
+    'duration'         => $durationValidation['sanitized'],
+    'encryptionType'   => $_POST['encryptionType'] ?? null
 ];
 
 // Save submission

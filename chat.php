@@ -898,14 +898,19 @@ if ($study['dataCollectionActive'] == 0) {
         // Get public key for client-side encryption
         $e2ePublicKey = $database->get('users', 'publicKey', ['userID' => $study['studyOwner']]);
     }
+
+    // Always fetch public key for client-side submission encryption (regardless of encryption mode)
+    if (empty($e2ePublicKey)) {
+        $e2ePublicKey = $database->get('users', 'publicKey', ['userID' => $study['studyOwner']]);
+    }
     ?>
 
     <script type="text/javascript">
         var baseURL = <?php echo json_encode($baseURL); ?>;
         var encryptionMode = <?php echo json_encode($encryptionMode); ?>;
+        var e2ePublicKeyPem = <?php echo json_encode($e2ePublicKey ?? ''); ?>;
         <?php if ($encryptionMode === 'e2e'): ?>
         var e2eConfig = <?php echo json_encode($e2eConfig); ?>;
-        var e2ePublicKeyPem = <?php echo json_encode($e2ePublicKey ?? ''); ?>;
         // Encrypted API key headers — decrypted at runtime so they don't appear in page source
         var _ekd = <?php echo json_encode(base64_encode($encSensitive)); ?>;
         var _ekk = <?php echo json_encode(base64_encode($pageKey)); ?>;
@@ -3393,22 +3398,23 @@ if ($study['dataCollectionActive'] == 0) {
             //     return;
             //}
 
-            // Build submission payload, encrypting client-side for E2E
+            // Build submission payload, always encrypting client-side when public key is available
             async function sendSubmission() {
                 var submissionText = newSubmission;
                 var passedVars = variablesString;
+                var submissionEncType = 'NA';
 
-                // E2E: encrypt submission text and passed variables in the browser (only if public key available)
-                if (typeof encryptionMode !== 'undefined' && encryptionMode === 'e2e'
-                    && typeof e2ePublicKeyPem !== 'undefined' && e2ePublicKeyPem) {
+                // Always encrypt submissions in the browser when a public key is available
+                if (typeof e2ePublicKeyPem !== 'undefined' && e2ePublicKeyPem) {
                     try {
                         var rsaKey = await _e2eGetPublicKey();
                         submissionText = await _e2eEncrypt(newSubmission, rsaKey);
                         if (passedVars) {
                             passedVars = await _e2eEncrypt(passedVars, rsaKey);
                         }
+                        submissionEncType = 'e2e';
                     } catch (e) {
-                        console.error('E2E encryption of submission failed:', e);
+                        console.error('Client-side encryption of submission failed:', e);
                         alert('Encryption failed. Please try again.');
                         return;
                     }
@@ -3423,7 +3429,8 @@ if ($study['dataCollectionActive'] == 0) {
                     passedVariables: passedVars,
                     numberMessages: numberMessages,
                     duration: ((new Date() - startTime) / 1000).toString(),
-                    condition: <?php echo $conditionNumber + 1; ?>
+                    condition: <?php echo $conditionNumber + 1; ?>,
+                    encryptionType: submissionEncType
                 }, function(data) {
                     console.log(data);
 

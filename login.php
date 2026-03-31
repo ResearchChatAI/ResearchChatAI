@@ -10,9 +10,8 @@
  * License: MIT
  */
 
-// Error reporting for development (disable in production)
-ini_set('display_errors', '1');
-ini_set('display_startup_errors', '1');
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
 error_reporting(E_ALL);
 
 require 'Backend/MySQL/medoo-Credentials.php';
@@ -56,7 +55,6 @@ define('MD5_HASH_LENGTH', 32);
 // INITIALIZATION
 // =============================================================================
 
-$host = $_SERVER['HTTP_HOST'];
 $errorCode = "";
 $message = "";
 $placeholderEmail = "";
@@ -126,7 +124,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['pm_loggedin'] = true;
                 $_SESSION['userID'] = $authResult['userID'];
                 $_SESSION['userSession'] = generateSecureToken(SESSION_KEY_LENGTH);
-
 
                 if ($isAjax) {
                     // Return encrypted key blob for client-side derivation
@@ -247,65 +244,6 @@ function authenticateUser($database, $email, $password)
     $result['keySalt'] = $user['keySalt'] ?? null;
 
     return $result;
-}
-
-/**
- * Validate and decrypt user's private encryption key
- *
- * @param array $user User record from database
- * @param string $password User's plaintext password
- * @return string|null|false Decrypted private key, null for legacy accounts, or false on failure
- */
-function validateEncryptionKeys($user, $password)
-{
-    $keySaltEncoded = $user['keySalt'];
-    $privateKeyEnc = $user['privateKeyEnc'];
-
-    // Check for legacy account without encryption keys
-    if (empty($keySaltEncoded) || empty($privateKeyEnc)) {
-        return null; // Legacy account - no private key
-    }
-
-    // Decode and validate salt
-    $keySalt = base64_decode($keySaltEncoded, true);
-    if ($keySalt === false || strlen($keySalt) !== SODIUM_CRYPTO_PWHASH_SALTBYTES) {
-        error_log("Invalid encryption key salt for user");
-        return false;
-    }
-
-    // Derive encryption key from password
-    $encryptionKey = sodium_crypto_pwhash(
-        SODIUM_CRYPTO_SECRETBOX_KEYBYTES,
-        $password,
-        $keySalt,
-        SODIUM_CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE,
-        SODIUM_CRYPTO_PWHASH_MEMLIMIT_INTERACTIVE,
-        SODIUM_CRYPTO_PWHASH_ALG_ARGON2ID13
-    );
-
-    // Decode encrypted private key
-    $encryptedData = base64_decode($privateKeyEnc, true);
-    if ($encryptedData === false) {
-        error_log("Invalid base64 encoded private key");
-        return false;
-    }
-
-    // Extract nonce and ciphertext
-    $nonce = substr($encryptedData, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-    $ciphertext = substr($encryptedData, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-
-    // Decrypt private key
-    $privateKey = sodium_crypto_secretbox_open($ciphertext, $nonce, $encryptionKey);
-
-    // Clear sensitive data from memory
-    sodium_memzero($encryptionKey);
-
-    if ($privateKey === false) {
-        error_log("Failed to decrypt private key - incorrect password or corrupted data");
-        return false;
-    }
-
-    return $privateKey;
 }
 
 /**
@@ -473,14 +411,9 @@ function generateSecureToken($length)
                     // If user has encryption keys, derive private key client-side
                     if (response.privateKeyEnc && response.keySalt) {
                         try {
-                            var _sodium = await sodium.ready;
+                            await sodium.ready;
+                            var s = sodium;
 
-                            // Debug: check what ready returns
-                            console.log('sodium.ready resolved to:', typeof _sodium, _sodium ? Object.keys(_sodium).slice(0,10) : 'null');
-                            // Use whichever has the crypto functions
-                            var s = (_sodium && _sodium.crypto_secretbox_open) ? _sodium : sodium;
-
-                            // Decode base64 salt
                             var keySalt = s.from_base64(response.keySalt, s.base64_variants.ORIGINAL);
 
                             // Derive encryption key (identical to PHP sodium_crypto_pwhash)
