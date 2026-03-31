@@ -1,6 +1,7 @@
 <?php
 require 'Backend/MySQL/medoo.php';
 require 'Backend/MySQL/medoo-Credentials.php';
+require_once 'Backend/Util/crypto.php';
 
 use Medoo\Medoo;
 
@@ -153,7 +154,7 @@ $activeTile = isset($_GET['tile']) ? $_GET['tile'] : null;
 
                     <div class="navbar-dropdown  is-right">
                         <div class="dropdown-item">
-                            <b><?php echo $user["userName"] . " " . $user["userSurname"]; ?></b>
+                            <b><?php echo htmlspecialchars(decryptString($user["userName"] ?? ''), ENT_QUOTES, 'UTF-8') . " " . htmlspecialchars(decryptString($user["userSurname"] ?? ''), ENT_QUOTES, 'UTF-8'); ?></b>
                         </div>
                         <a class="navbar-item" href="profile-edit.php">
                             Edit profile

@@ -17,6 +17,7 @@ error_reporting(E_ALL);
 
 require 'Backend/MySQL/medoo-Credentials.php';
 require_once 'Backend/Util/email.php';
+require_once 'Backend/Util/crypto.php';
 
 use Medoo\Medoo;
 
@@ -292,8 +293,8 @@ function createUserAccount($database, string $firstName, string $lastName, strin
         $hashedPassword = password_hash($password, PASSWORD_ARGON2ID);
 
         $insertResult = $database->insert("users", [
-            "userName"             => $firstName,
-            "userSurname"          => $lastName,
+            "userName"             => encryptString($firstName),
+            "userSurname"          => encryptString($lastName),
             "userEmail"            => $email,
             "userPassword"         => $hashedPassword,
             "publicKey"            => $publicKey,

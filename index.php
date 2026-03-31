@@ -60,6 +60,7 @@ $csrfToken = $_SESSION['csrf_token'];
 
 require 'Backend/MySQL/medoo.php';
 require 'Backend/MySQL/medoo-Credentials.php';
+require_once 'Backend/Util/crypto.php';
 
 $userID = (int)$_SESSION['userID'];
 
@@ -172,7 +173,9 @@ if (!empty($studyIDs)) {
   }
 }
 
-// Escape user data for safe output
+// Decrypt and escape user data for safe output
+$user['userName'] = decryptString($user['userName'] ?? '');
+$user['userSurname'] = decryptString($user['userSurname'] ?? '');
 $displayName = htmlspecialchars($user['userName'], ENT_QUOTES, 'UTF-8');
 $displaySurname = htmlspecialchars($user['userSurname'], ENT_QUOTES, 'UTF-8');
 $displayFullName = $displayName . ' ' . $displaySurname;

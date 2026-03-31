@@ -17,6 +17,8 @@ error_reporting(E_ALL);
 
 session_start();
 
+require_once __DIR__ . '/../Util/crypto.php';
+
 // =============================================================================
 // SECURITY HEADERS
 // =============================================================================
@@ -206,10 +208,10 @@ function updateUserProfile($database, int $userID, string $name, string $surname
         
         // Update user profile
         $updateResult = $database->update('users', [
-            'userName' => $name,
-            'userSurname' => $surname,
+            'userName' => encryptString($name),
+            'userSurname' => encryptString($surname),
             'userEmail' => $email,
-            'userInstitution' => $institution,
+            'userInstitution' => encryptString($institution),
             'userLastActiveDate' => date('Y-m-d H:i:s')
         ], [
             'userID' => $userID

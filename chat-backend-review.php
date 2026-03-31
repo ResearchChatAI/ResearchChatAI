@@ -181,6 +181,8 @@ $activeTab = isset($_GET['submissionsPage']) ? 'submissions' : 'messages';
 // =============================================================================
 
 $displayStudyName = htmlspecialchars($study["studyName"], ENT_QUOTES, 'UTF-8');
+$user["userName"] = decryptString($user["userName"] ?? '');
+$user["userSurname"] = decryptString($user["userSurname"] ?? '');
 $displayUserName = htmlspecialchars($user["userName"], ENT_QUOTES, 'UTF-8');
 $displayUserSurname = htmlspecialchars($user["userSurname"], ENT_QUOTES, 'UTF-8');
 $displayFullName = $displayUserName . ' ' . $displayUserSurname;
