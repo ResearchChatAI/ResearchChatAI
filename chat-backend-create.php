@@ -75,6 +75,9 @@ require 'Backend/Util/crypto.php';
 // Determine base URL from environment
 $baseURL = $env['BASE_URL'] ?? '';
 
+// OpenAI models offered in the model dropdown and what each of them supports
+$openaiModels = require 'Backend/Chat/openai-models.php';
+
 // =============================================================================
 // VALIDATE INPUT AND AUTHORIZATION
 // =============================================================================
@@ -1328,52 +1331,76 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
                 <input id="openaiTemperatureInput" class="input trackChanges" fieldKey="openaiTemperature" saveIndicatorElement="#openAiTemperatureLabel" type="text"
                   placeholder="Default: 0.8" value="<?php echo $study["openaiTemperature"]; ?>" style="max-width: 450px;">
                 <p class="help">Note: The temperature parameter controls the randomness of the output. Lower temperatures make the model more confident, while higher temperatures make the model more creative. The default value is 0.8.</p>
+                <!-- Filled in for models that do not use the temperature (see updateOpenAiModelSettings) -->
+                <p class="help has-text-danger" id="openaiTemperatureNote" style="display:none;"></p>
               </div>
             </div>
 
             <!--Select model-->
+            <?php
+            // Models come from Backend/Chat/openai-models.php. A stored value that is not in
+            // that list is still shown as it is, so the dropdown never displays another model
+            // than the one the study uses.
+            $openaiStoredModel  = (string) ($study["openaiModel"] ?? '');
+            $openaiStoredEffort = (string) ($study["openaiReasoningEffort"] ?? '');
+            $openaiEffortLabels = ['none' => 'None (no reasoning)', 'minimal' => 'Minimal', 'low' => 'Low', 'medium' => 'Medium', 'high' => 'High', 'xhigh' => 'Extra high'];
+            ?>
             <div class="field mt-5">
               <label class="label has-text-left" id="openAiModelLabel">OpenAI Model</label>
               <div class="control">
                 <div class="select">
-                  <select id="modelSelect" class="trackChanges" fieldKey="openaiModel" saveIndicatorElement="#openAiModelLabel" onchange="document.getElementById('gpt5VerificationNotice').style.display=(this.value.startsWith('gpt-5'))?'':'none'">
-                    <option value="gpt-5" <?php echo ($study["openaiModel"] == "gpt-5") ? "selected" : ""; ?>>GPT-5</option>
-                    <option value="gpt-5-mini" <?php echo ($study["openaiModel"] == "gpt-5-mini") ? "selected" : ""; ?>>GPT-5-mini</option>
-                    <option value="gpt-4o" <?php echo ($study["openaiModel"] == "gpt-4o") ? "selected" : ""; ?>>GPT-4o</option>
-                    <option value="gpt-4o-mini" <?php echo ($study["openaiModel"] == "gpt-4o-mini") ? "selected" : ""; ?>>GPT-4o Mini</option>
-                    <option value="gpt-4" <?php echo ($study["openaiModel"] == "gpt-4") ? "selected" : ""; ?>>GPT-4</option>
-                    <option value="gpt-4-turbo" <?php echo ($study["openaiModel"] == "gpt-4-turbo") ? "selected" : ""; ?>>GPT-4 Turbo</option>
+                  <select id="modelSelect" class="trackChanges" fieldKey="openaiModel" saveIndicatorElement="#openAiModelLabel">
+                    <?php foreach (['current' => 'Current models', 'older' => 'Older models'] as $openaiGroupKey => $openaiGroupLabel) : ?>
+                      <optgroup label="<?php echo $openaiGroupLabel; ?>">
+                        <?php foreach ($openaiModels as $openaiModelId => $openaiModelInfo) : ?>
+                          <?php if ($openaiModelInfo['group'] !== $openaiGroupKey) continue; ?>
+                          <option value="<?php echo htmlspecialchars($openaiModelId, ENT_QUOTES, 'UTF-8'); ?>" <?php echo ($openaiStoredModel === $openaiModelId) ? "selected" : ""; ?>><?php
+                            echo htmlspecialchars($openaiModelInfo['label'], ENT_QUOTES, 'UTF-8');
+                            if (!empty($openaiModelInfo['shutdown'])) {
+                              echo ' (OpenAI shutdown: ' . date('M j, Y', strtotime($openaiModelInfo['shutdown'])) . ')';
+                            }
+                          ?></option>
+                        <?php endforeach; ?>
+                      </optgroup>
+                    <?php endforeach; ?>
+                    <?php if ($openaiStoredModel !== '' && !isset($openaiModels[$openaiStoredModel])) : ?>
+                      <option value="<?php echo htmlspecialchars($openaiStoredModel, ENT_QUOTES, 'UTF-8'); ?>" selected><?php echo htmlspecialchars($openaiStoredModel, ENT_QUOTES, 'UTF-8'); ?> (not in the list)</option>
+                    <?php endif; ?>
                   </select>
                 </div>
               </div>
             </div>
-            <div id="gpt5VerificationNotice"
-              class="help has-text-danger"
-              style="display: <?php echo (strncmp($study["openaiModel"], "gpt-5", 5) === 0) ? "" : "none"; ?>;">
-              GPT-5 requires that your OpenAI account is verified. <a href="https://lyfeai.com.au/openai-id-verification-gpt5-access/" target="_blank" rel="noopener">Learn more.</a>
+            <!-- Notes about the selected model, filled in by updateOpenAiModelSettings() -->
+            <div id="openaiShutdownNotice" class="help has-text-danger" style="display:none;"></div>
+            <div id="gpt5VerificationNotice" class="help has-text-danger" style="display:none;">
+              This model may require that your OpenAI organization is verified. <a href="https://help.openai.com/en/articles/10910291-api-organization-verification" target="_blank" rel="noopener">Learn more.</a>
             </div>
 
-            <!-- Reasoning effort (GPT-5 and mini models only) -->
+            <!-- Reasoning effort (models that reason; the options depend on the model) -->
             <div class="field mt-5" id="reasoningEffortField" style="display:none;">
               <label class="label has-text-left" id="openAiReasoningLabel">Reasoning Effort</label>
               <div class="control">
                 <div class="select">
                   <select id="openaiReasoningSelect" class="trackChanges" fieldKey="openaiReasoningEffort" saveIndicatorElement="#openAiReasoningLabel">
-                    <option value="" <?php echo ($study["openaiReasoningEffort"] == "") ? "selected" : ""; ?>>Default</option>
-                    <option value="minimal" <?php echo ($study["openaiReasoningEffort"] == "minimal") ? "selected" : ""; ?>>Minimal</option>
-                    <option value="low" <?php echo ($study["openaiReasoningEffort"] == "low") ? "selected" : ""; ?>>Low</option>
-                    <option value="medium" <?php echo ($study["openaiReasoningEffort"] == "medium") ? "selected" : ""; ?>>Medium</option>
-                    <option value="high" <?php echo ($study["openaiReasoningEffort"] == "high") ? "selected" : ""; ?>>High</option>
+                    <option value="" <?php echo ($openaiStoredEffort === "") ? "selected" : ""; ?>>Default</option>
+                    <?php foreach ($openaiEffortLabels as $openaiEffortValue => $openaiEffortLabel) : ?>
+                      <option value="<?php echo $openaiEffortValue; ?>" <?php echo ($openaiStoredEffort === $openaiEffortValue) ? "selected" : ""; ?>><?php echo $openaiEffortLabel; ?></option>
+                    <?php endforeach; ?>
+                    <?php if ($openaiStoredEffort !== '' && !isset($openaiEffortLabels[$openaiStoredEffort])) : ?>
+                      <option value="<?php echo htmlspecialchars($openaiStoredEffort, ENT_QUOTES, 'UTF-8'); ?>" selected><?php echo htmlspecialchars($openaiStoredEffort, ENT_QUOTES, 'UTF-8'); ?></option>
+                    <?php endif; ?>
                   </select>
                 </div>
+                <p class="help">Note: "Default" leaves the level to OpenAI (Medium for the current models). Higher levels make the model think longer before it answers, so replies take more time and cost more.</p>
+                <p class="help has-text-danger" id="openaiEffortResetNotice" style="display:none;"></p>
               </div>
-              <!-- Hide reasoning traces (GPT-5 and mini models only) -->
+              <!-- Hide reasoning traces -->
               <div class="field mt-3">
                 <label class="checkbox">
                   <input type="checkbox" class="trackChanges" fieldKey="openaiHideReasoning" saveIndicatorElement="#openAiReasoningLabel" <?php echo ($study["openaiHideReasoning"] == 1) ? "checked" : ""; ?> />
                   Hide reasoning in chat
                 </label>
-                <p class="help">Note: When enabled, any available reasoning section from GPT‑5 models will be hidden from participants in the chat UI.</p>
+                <p class="help">Note: When enabled, any available reasoning section from the model will be hidden from participants in the chat UI.</p>
               </div>
             </div>
 
@@ -1481,6 +1508,15 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
                 we provide some popular templates below for easy setup. You can also write
                 your own connector JSON from scratch at any time.
               </p>
+              <div class="notification is-warning is-light">
+                <p>
+                  <strong>Heads up:</strong> the models offered in these templates can be
+                  discontinued by their providers at any time, which will cause your study's
+                  chat to stop working. Please check regularly that the model you selected is
+                  still available from your provider, and update your connector to a current
+                  model whenever it is retired.
+                </p>
+              </div>
             </div>
 
             <!-- Quick-start templates -->
@@ -2362,6 +2398,13 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               <span>Custom connector selected; connection cannot be automatically verified. Please ensure your connector endpoint is working correctly.</span>
             </div>
           </div>
+          <!--Selected OpenAI model has an announced shutdown date-->
+          <div class="notification mb-2 p-2 is-light is-warning" id="llmModelShutdownStatusCheck" style="display:none;">
+            <span class="icon mr-2">
+              <i class="fa fa-exclamation-triangle"></i>
+            </span>
+            <span id="llmModelShutdownStatusText"></span>
+          </div>
 
           <label class="label has-text-left mt-5">Step 4: Participant settings</label>
           <!--Participant instructions-->
@@ -2899,6 +2942,9 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
     var baseURL = <?php echo json_encode($baseURL . 'chat.php?'); ?>;
     var passedVariablesInit = <?php echo empty($study["passedVariables"]) ? '[]' : $study["passedVariables"]; ?>;
     var experimentalConditionToDelete = -1; // This is a helper variable to store the condition that should be deleted
+    // OpenAI models in the dropdown and what each of them supports (from Backend/Chat/openai-models.php)
+    var openaiModels = <?php echo json_encode($openaiModels); ?>;
+    var openaiEffortLabels = <?php echo json_encode($openaiEffortLabels); ?>;
 
     //Listen for document ready event
     // =========================================================================
@@ -3036,21 +3082,14 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
         conductPrelaunchCheck();
       });
 
-      // Show or hide reasoning effort dropdown based on selected model
-      /**
-       * Update visibility of reasoning effort slider based on selected model
-       * Only show for O1 models that support reasoning effort
-       */
-      function updateReasoningVisibility() {
-        var selected = $('#modelSelect').val() || '';
-        if (selected === 'gpt-5' || selected === 'gpt-5-mini') {
-          $('#reasoningEffortField').show();
-        } else {
-          $('#reasoningEffortField').hide();
-        }
-      }
-      $('#modelSelect').on('change', updateReasoningVisibility);
-      updateReasoningVisibility();
+      // Show the settings and notes that apply to the selected OpenAI model.
+      // On page load nothing is saved; only when the researcher picks another model
+      // can the reasoning effort be reset (see updateOpenAiModelSettings).
+      $('#modelSelect').on('change', function() {
+        updateOpenAiModelSettings(true);
+        conductPrelaunchCheck();
+      });
+      updateOpenAiModelSettings(false);
 
       // Listen for click on elements with .mbHelpButton
       $('.mbHelpButton').on('click', function() {
@@ -4181,6 +4220,106 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
       iframe.src = newUrl;
     }
 
+    // =========================================================================
+    // OPENAI MODEL SETTINGS
+    // =========================================================================
+
+    /**
+     * What an OpenAI model supports.
+     * Models that are not in the list keep the rules they always had.
+     *
+     * @param {string} modelId - Value of the model dropdown
+     * @returns {object} { label, efforts, temperature, shutdown, verification }
+     */
+    function getOpenAiModelInfo(modelId) {
+      if (openaiModels[modelId]) return openaiModels[modelId];
+
+      var isGpt5 = String(modelId).toLowerCase().indexOf('gpt-5') === 0;
+      return {
+        label: modelId,
+        efforts: (modelId === 'gpt-5' || modelId === 'gpt-5-mini') ? ['minimal', 'low', 'medium', 'high'] : [],
+        temperature: isGpt5 ? 'default-only' : 'always',
+        shutdown: null,
+        verification: isGpt5
+      };
+    }
+
+    /**
+     * Describe an announced shutdown of the selected OpenAI model.
+     *
+     * @param {object} info - Result of getOpenAiModelInfo()
+     * @returns {string} Sentence for the researcher, or '' if no shutdown is announced
+     */
+    function getOpenAiShutdownText(info) {
+      if (!info.shutdown) return '';
+
+      var shutdownDate = new Date(info.shutdown + 'T00:00:00');
+      var dateText = shutdownDate.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
+      if (shutdownDate <= new Date()) {
+        return 'OpenAI switched off ' + info.label + ' on ' + dateText + '. Chats in this study no longer get replies until you choose another model.';
+      }
+      return 'OpenAI will switch off ' + info.label + ' on ' + dateText + '. From that day on, chats in this study stop getting replies until you choose another model.';
+    }
+
+    /**
+     * Show the settings and notes that apply to the selected OpenAI model:
+     * reasoning effort options, verification notice, shutdown date and temperature note.
+     * Saves nothing by itself, with one exception: when the researcher switches to a
+     * model that does not accept the saved reasoning effort, the effort is set back to "Default".
+     *
+     * @param {boolean} modelChanged - true when the researcher just picked another model
+     */
+    function updateOpenAiModelSettings(modelChanged) {
+      var selected = $('#modelSelect').val() || '';
+      var info = getOpenAiModelInfo(selected);
+
+      // Reasoning effort: offer only what this model accepts
+      var $effort = $('#openaiReasoningSelect');
+      var currentEffort = $effort.val() || '';
+      var effortSupported = currentEffort === '' || info.efforts.indexOf(currentEffort) !== -1;
+
+      $effort.empty().append(new Option('Default', ''));
+      info.efforts.forEach(function(effort) {
+        $effort.append(new Option(openaiEffortLabels[effort] || effort, effort));
+      });
+
+      if (effortSupported) {
+        $effort.val(currentEffort);
+        if (modelChanged) $('#openaiEffortResetNotice').hide();
+      } else if (modelChanged) {
+        $effort.val('').trigger('change');
+        $('#openaiEffortResetNotice')
+          .text('Reasoning effort was set back to "Default" because ' + info.label + ' does not support "' + (openaiEffortLabels[currentEffort] || currentEffort) + '".')
+          .show();
+      } else {
+        // The saved value does not fit the saved model: show it as it is and change nothing
+        $effort.append(new Option((openaiEffortLabels[currentEffort] || currentEffort) + ' (not supported by this model)', currentEffort));
+        $effort.val(currentEffort);
+      }
+      $('#reasoningEffortField').toggle(info.efforts.length > 0);
+
+      // Verification and shutdown notes
+      $('#gpt5VerificationNotice').toggle(!!info.verification);
+      var shutdownText = getOpenAiShutdownText(info);
+      $('#openaiShutdownNotice').text(shutdownText).toggle(shutdownText !== '');
+
+      // Temperature: say so when the model does not use it
+      var temperatureNote = '';
+      if (info.temperature === 'effort-none') {
+        temperatureNote = 'Note: ' + info.label + ' only accepts a temperature when Reasoning Effort is set to "None". With any other setting the temperature is not sent to OpenAI.';
+      } else if (info.temperature === 'never') {
+        temperatureNote = 'Note: ' + info.label + ' does not accept a temperature. The value above is not sent to OpenAI.';
+      } else if (info.temperature === 'default-only') {
+        temperatureNote = 'Note: ' + info.label + ' only accepts the temperature 1. Any other value is not sent to OpenAI.';
+      }
+      $('#openaiTemperatureNote').text(temperatureNote).toggle(temperatureNote !== '');
+    }
+
     // Set correct status for elements inside Step 5: Prelaunch check by checking inputs for welcome message, close button, ai attributes, chat apperance, ai isntructions, particiapnt instructions
     /**
      * Conduct pre-launch validation check for the study
@@ -4325,6 +4464,14 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
           }
         }
       }
+
+      // Warn when OpenAI has announced a shutdown date for the selected model
+      var openAiShutdownText = '';
+      if ($('#openAiModelProviderRadioButton').hasClass('active')) {
+        openAiShutdownText = getOpenAiShutdownText(getOpenAiModelInfo($('#modelSelect').val() || ''));
+      }
+      $('#llmModelShutdownStatusText').text(openAiShutdownText);
+      $('#llmModelShutdownStatusCheck').toggle(openAiShutdownText !== '');
     }
 
     /**
