@@ -3467,6 +3467,7 @@ if ($study['dataCollectionActive'] == 0) {
             var instructionsHeight = 0;
             var chatHeight = 0;
             var isPillInRightContainer = false;
+            var isSideBySide = $('.container').css('flex-direction') === 'row'; // Desktop layout (columns side by side)
 
             // Check if pill-container is in the DOM and get its height
             if ($('.pill-container').length) {
@@ -3487,7 +3488,7 @@ if ($study['dataCollectionActive'] == 0) {
             if (isPillInRightContainer == true) {
                 var topOffset = pillHeight; // Adjust this value to set the distance from the top
                 $("#taskDescription").css({
-                    'top': topOffset + 'px', // Set the top offset
+                    'top': isSideBySide ? topOffset + 'px' : '', // Set the top offset (desktop only)
                     //'height': $(window).height() - 35 - topOffset + 'px' // Adjust the height relative to the top
                 });
             }
@@ -3528,6 +3529,14 @@ if ($study['dataCollectionActive'] == 0) {
                     rightColumn.style.margin = '0 auto';
                 }
 
+            }
+
+            // Without a submission window, let the instructions grow to the bottom of the chatbox (desktop only)
+            if ($('#taskDescription').length && !$('#taskSubmissionTextarea').length) {
+                $('#taskDescription').css({
+                    'max-height': isSideBySide ? $('.chat-container').outerHeight() + 'px' : '', // Mobile keeps the 50vh limit
+                    'margin-bottom': isSideBySide ? '0' : '' // Nothing below it, so no gap needed
+                });
             }
         }
 
