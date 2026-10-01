@@ -952,8 +952,13 @@ if ($study['dataCollectionActive'] == 0) {
                             ?>;
         var OPENAI_HIDE_REASONING = parseInt(<?php echo getStudyValue("openaiHideReasoning", 0); ?>) || 0;
         var CUSTOM_HIDE_REASONING = parseInt(<?php echo json_encode($study["customConnectorHideReasoning"] ?? 0); ?>) || 0;
+        // OpenAI generations after GPT-5 (GPT-5.6, GPT-6, ...). GPT-5 and GPT-5 mini keep their
+        // reasoning display exactly as it was, so the two refinements below apply to these only.
+        var OPENAI_NEWER_MODEL = MODEL_PROVIDER === "openai" && /^gpt-(5\.\d|[6-9]|[1-9][0-9])/i.test(String(MODEL_NAME || ""));
+        // With reasoning effort "none" the model does not think, so there is nothing to show
+        var OPENAI_REASONING_OFF = OPENAI_NEWER_MODEL && <?php echo json_encode((string) ($study["openaiReasoningEffort"] ?? "")); ?> === "none";
         // If false, no reasoning UI appears at all (no chevron, no block).
-        window.REASONING_VISIBLE = (/^gpt-([5-9]|[1-9][0-9])/i.test(String(MODEL_NAME || "")) && (OPENAI_HIDE_REASONING !== 1)) || (MODEL_PROVIDER === "custom" && CUSTOM_HIDE_REASONING !== 1);
+        window.REASONING_VISIBLE = (/^gpt-([5-9]|[1-9][0-9])/i.test(String(MODEL_NAME || "")) && (OPENAI_HIDE_REASONING !== 1) && !OPENAI_REASONING_OFF) || (MODEL_PROVIDER === "custom" && CUSTOM_HIDE_REASONING !== 1);
         // If true, each reasoning block starts expanded; if false, collapsed.
         window.REASONING_DEFAULT_OPEN = false;
 
@@ -2118,6 +2123,10 @@ if ($study['dataCollectionActive'] == 0) {
                                         // Extract reasoning from completed response
                                         if (obj.response.reasoning) {
                                             var rs2 = typeof extractReasoningSummary === 'function' ? extractReasoningSummary(obj.response.reasoning.summary) : null;
+                                            // Same as in the proxied path: the summary mode label is not reasoning text
+                                            if (rs2 && OPENAI_NEWER_MODEL && /^(auto|detailed|concise|brief)$/i.test(rs2.trim())) {
+                                                rs2 = null;
+                                            }
                                             if (rs2) {
                                                 ensureReasoningContainer(thisMsgId);
                                                 reasoningPartSet(thisMsgId, 'final', 0, rs2, true);
@@ -2568,6 +2577,11 @@ if ($study['dataCollectionActive'] == 0) {
                                                     let rs = '';
                                                     if (obj.response && obj.response.reasoning) {
                                                         rs = extractReasoningSummary(obj.response.reasoning.summary) || '';
+                                                    }
+                                                    // This field echoes the requested summary mode ("auto", "detailed", ...),
+                                                    // which is not reasoning text. Newer models don't show it.
+                                                    if (OPENAI_NEWER_MODEL && /^(auto|detailed|concise|brief)$/i.test(rs.trim())) {
+                                                        rs = '';
                                                     }
                                                     if (rs && !st.sawSummary) {
                                                         reasoningPartSet(thisMsgId, 'final', 0, rs, true);
