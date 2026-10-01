@@ -937,7 +937,7 @@ if ($study['dataCollectionActive'] == 0) {
         var MAX_USER_MSGS = parseInt(<?php echo json_encode(getStudyValue("maxNumberParticipantMessages", 0)); ?>) || 0;
 
         // --- Global reasoning UI controls ---
-        // Determine if current model is GPT‑5 (only then we show reasoning by default)
+        // Determine if current model is GPT‑5 or a later generation (only then we show reasoning by default)
         var MODEL_PROVIDER = <?php echo json_encode($study["modelProvider"] ?? ""); ?>;
         var MODEL_NAME = <?php
                             $modelName = "";
@@ -953,7 +953,7 @@ if ($study['dataCollectionActive'] == 0) {
         var OPENAI_HIDE_REASONING = parseInt(<?php echo getStudyValue("openaiHideReasoning", 0); ?>) || 0;
         var CUSTOM_HIDE_REASONING = parseInt(<?php echo json_encode($study["customConnectorHideReasoning"] ?? 0); ?>) || 0;
         // If false, no reasoning UI appears at all (no chevron, no block).
-        window.REASONING_VISIBLE = (/^gpt-5/i.test(String(MODEL_NAME || "")) && (OPENAI_HIDE_REASONING !== 1)) || (MODEL_PROVIDER === "custom" && CUSTOM_HIDE_REASONING !== 1);
+        window.REASONING_VISIBLE = (/^gpt-([5-9]|[1-9][0-9])/i.test(String(MODEL_NAME || "")) && (OPENAI_HIDE_REASONING !== 1)) || (MODEL_PROVIDER === "custom" && CUSTOM_HIDE_REASONING !== 1);
         // If true, each reasoning block starts expanded; if false, collapsed.
         window.REASONING_DEFAULT_OPEN = false;
 
@@ -2839,6 +2839,15 @@ if ($study['dataCollectionActive'] == 0) {
                                                 }
                                             }
                                             if (rawMsg != null) break;
+                                        }
+                                    }
+                                }
+                                // Fallback: Anthropic format (the first block can be a thinking block, so take the first text block)
+                                if (rawMsg == null && Array.isArray(aiJson.content)) {
+                                    for (var ai = 0; ai < aiJson.content.length; ai++) {
+                                        if (aiJson.content[ai] && aiJson.content[ai].type === 'text' && typeof aiJson.content[ai].text === 'string') {
+                                            rawMsg = aiJson.content[ai].text;
+                                            break;
                                         }
                                     }
                                 }
