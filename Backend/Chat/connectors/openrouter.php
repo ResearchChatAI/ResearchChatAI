@@ -49,3 +49,29 @@ $connector = [
         'resultPath' => '$.choices[0].message.content',
     ],
 ];
+
+/* ---- Response limit (optional, per study) ----
+ *
+ * Studies created before this setting existed have no value. They keep the
+ * original limit and timeout above, so they send exactly the same request
+ * as before. Only a study with a value gets its own limit, plus the longer
+ * timeout that models which think before answering need.
+ *
+ * The value is read here on its own (and not added to the column list in
+ * prepareChat.php) so that a database without the column simply behaves
+ * as before instead of failing.
+ */
+
+$maxTokensSetting = $study['openrouterMaxTokens'] ?? null;
+if ($maxTokensSetting === null && isset($database, $study['studyID'])) {
+    try {
+        $maxTokensSetting = $database->get('studies', 'openrouterMaxTokens', ['studyID' => $study['studyID']]);
+    } catch (\Throwable $e) {
+        $maxTokensSetting = null;
+    }
+}
+
+if (is_numeric($maxTokensSetting) && (int) $maxTokensSetting > 0) {
+    $connector['aiPayload']['max_tokens'] = min((int) $maxTokensSetting, 128000);
+    $connector['request']['timeoutMs']    = 120000;
+}

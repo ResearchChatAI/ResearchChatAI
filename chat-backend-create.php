@@ -1426,7 +1426,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
                 <input id="openRouterApiKeyInput" class="input trackChanges" fieldKey="openrouterApiKey" saveIndicatorElement="#openRouterKeyLabel" type="text"
                   placeholder="e.g., sk-..." value="<?php echo $study["openrouterApiKey"]; ?>" style="max-width: 450px;">
                 <p class="help">Note: You require an OpenRouter API key to use their services.</p>
-                <p class="help">The backend uses a fixed seed of 1106.</p>
+                <p class="help">The backend uses a fixed seed of 1106 for models that support a seed.</p>
               </div>
             </div>
 
@@ -1446,31 +1446,51 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               <div class="control">
                 <div style="position: relative; max-width: 450px; display: inline-block; width: 100%;">
                   <input id="openrouterModelInput" class="input trackChanges" fieldKey="openrouterModel" saveIndicatorElement="#openRouterModelLabel" type="text"
-                    placeholder="e.g., anthropic/claude-3.5-sonnet" value="<?php echo $study["openrouterModel"]; ?>" autocomplete="off">
+                    placeholder="e.g., anthropic/claude-sonnet-5" value="<?php echo $study["openrouterModel"]; ?>" autocomplete="off">
                   <div id="orModelDropdown" style="display:none; position:absolute; left:0; right:0; top:100%; z-index:50; max-height:250px; overflow-y:auto; background:#fff; border:1px solid #dbdbdb; border-top:none; border-radius:0 0 4px 4px; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
                   </div>
                 </div>
                 <p class="help">Note: You can use any model offered by OpenRouter. Start typing to search from all available models. See a full list at <a href="https://openrouter.ai/models" target="_blank">https://openrouter.ai/models</a>. Please be aware that model names might change and that this will require you to update the name here.</p>
+                <?php
+                // Suggestions only: any model ID from OpenRouter can be typed into the field above.
+                $openrouterPopularModels = [
+                  'anthropic/claude-haiku-4.5', 'anthropic/claude-opus-5.5', 'anthropic/claude-sonnet-5',
+                  'deepseek/deepseek-v4.1-flash', 'google/gemini-3.1-flash-lite', 'google/gemini-3.8-flash',
+                  'google/gemma-4-31b-it', 'minimax/minimax-m3', 'mistralai/mistral-small-2603',
+                  'moonshotai/kimi-k3', 'nvidia/nemotron-3-ultra-550b-a55b', 'openai/gpt-6-luna',
+                  'openai/gpt-6-sol', 'qwen/qwen3.8-flash', 'x-ai/grok-4.7', 'xiaomi/mimo-v2.6-pro', 'z-ai/glm-5.3',
+                ];
+                // Suggested earlier and still offered by OpenRouter (kept for studies that want the same model as before)
+                $openrouterOlderModels = [
+                  'anthropic/claude-opus-4.6', 'anthropic/claude-sonnet-4.6', 'deepseek/deepseek-v3.2',
+                  'google/gemini-3-flash-preview', 'meta-llama/llama-3.1-8b-instruct', 'minimax/minimax-m2.5',
+                  'minimax/minimax-m2.7', 'mistralai/mistral-nemo', 'nvidia/nemotron-3-super-120b-a12b:free',
+                  'qwen/qwen3.5-flash-02-23', 'z-ai/glm-5-turbo',
+                ];
+                ?>
                 <p class="mt-3" style="font-size: 0.85rem;">
                   <span class="has-text-grey-dark has-text-weight-semibold">Popular models:</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">anthropic/claude-opus-4.6</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">anthropic/claude-sonnet-4.6</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">deepseek/deepseek-v3.2</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">google/gemini-2.5-flash</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">google/gemini-2.5-flash-lite</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">google/gemini-3-flash-preview</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">meta-llama/llama-3.1-8b-instruct</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">minimax/minimax-m2.5</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">minimax/minimax-m2.7</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">mistralai/mistral-nemo</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">nvidia/nemotron-3-super-120b-a12b:free</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">qwen/qwen3.5-flash-02-23</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">x-ai/grok-4.1-fast</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">x-ai/grok-4.20-beta</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">xiaomi/mimo-v2-omni</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">xiaomi/mimo-v2-pro</span>
-                  <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;">z-ai/glm-5-turbo</span>
+                  <?php foreach ($openrouterPopularModels as $openrouterTag) : ?>
+                    <span class="or-model-tag tag is-info is-light" title="Choose" style="cursor:pointer; margin: 2px;"><?php echo htmlspecialchars($openrouterTag, ENT_QUOTES, 'UTF-8'); ?></span>
+                  <?php endforeach; ?>
                 </p>
+                <p class="mt-2" style="font-size: 0.85rem;">
+                  <span class="has-text-grey-dark has-text-weight-semibold">Older models (still available):</span>
+                  <?php foreach ($openrouterOlderModels as $openrouterTag) : ?>
+                    <span class="or-model-tag tag is-light" title="Choose" style="cursor:pointer; margin: 2px;"><?php echo htmlspecialchars($openrouterTag, ENT_QUOTES, 'UTF-8'); ?></span>
+                  <?php endforeach; ?>
+                </p>
+              </div>
+            </div>
+
+            <!--Response limit-->
+            <div class="field mt-5">
+              <label class="label has-text-left" id="openRouterMaxTokensLabel">Maximum response length (tokens)</label>
+              <div class="control">
+                <input id="openrouterMaxTokensInput" class="input trackChanges" fieldKey="openrouterMaxTokens" saveIndicatorElement="#openRouterMaxTokensLabel" type="text" inputmode="numeric"
+                  placeholder="1500" value="<?php echo htmlspecialchars((string) ($study["openrouterMaxTokens"] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" style="max-width: 450px;">
+                <p class="help">Note: The longest reply the model may produce. Many current models think before they answer, and that thinking counts towards this limit, so a low value can cut a reply off or leave it empty. New studies start with 8000.</p>
+                <p class="help">If this field is empty, the study keeps the previous fixed limit of 1500 tokens and waits up to 30 seconds for a reply. With a value, it waits up to 120 seconds.</p>
               </div>
             </div>
 
