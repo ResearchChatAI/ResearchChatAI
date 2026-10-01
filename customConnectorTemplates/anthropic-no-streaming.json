@@ -1,6 +1,6 @@
 {
   "name": "Anthropic Claude — No Streaming",
-  "description": "Connect directly to the Anthropic API without streaming. The full response is returned at once.",
+  "description": "Connect directly to the Anthropic API without streaming. The full response is returned at once. The current Claude models think before they answer, so a reply can take a few seconds longer; the thinking itself is not shown.",
   "requiresStreaming": false,
   "fields": [
     {
@@ -15,11 +15,13 @@
       "label": "Model",
       "type": "select",
       "options": [
-        { "value": "claude-opus-4-20250514", "label": "Claude Opus 4" },
-        { "value": "claude-sonnet-4-20250514", "label": "Claude Sonnet 4" },
-        { "value": "claude-haiku-3-5-20241022", "label": "Claude 3.5 Haiku" }
+        { "value": "claude-sonnet-5", "label": "Claude Sonnet 5" },
+        { "value": "claude-opus-5-5", "label": "Claude Opus 5.5" },
+        { "value": "claude-haiku-4-5", "label": "Claude Haiku 4.5" },
+        { "value": "claude-opus-4-8", "label": "Claude Opus 4.8 (older model)" },
+        { "value": "claude-sonnet-4-6", "label": "Claude Sonnet 4.6 (older model)" }
       ],
-      "default": "claude-sonnet-4-20250514"
+      "default": "claude-sonnet-5"
     }
   ],
   "connector": {
@@ -37,12 +39,12 @@
         "anthropic-version": "2023-06-01",
         "anthropic-dangerous-direct-browser-access": "true"
       },
-      "timeoutMs": 30000
+      "timeoutMs": 120000
     },
     "aiPayload": {
       "model": "{{model}}",
       "system": "{{systemPrompt}}",
-      "max_tokens": 1024
+      "max_tokens": 16000
     },
     "history": {
       "mode": "array",

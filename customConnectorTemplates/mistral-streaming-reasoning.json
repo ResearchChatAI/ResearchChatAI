@@ -1,6 +1,6 @@
 {
   "name": "Mistral — Streaming + Reasoning",
-  "description": "Connect to the Mistral API with streaming and native reasoning via Magistral models. Reasoning is always active — no extra parameters needed. Reasoning traces appear before the final answer.",
+  "description": "Connect to the Mistral API with streaming and reasoning switched on (reasoning_effort: high). The model's reasoning arrives before the final answer and appears in a collapsible block (untick 'Hide reasoning in chat' to show it). Only Mistral Small 4 and Medium 3.5 support reasoning.",
   "requiresStreaming": true,
   "fields": [
     {
@@ -15,10 +15,10 @@
       "label": "Model",
       "type": "select",
       "options": [
-        { "value": "magistral-small-latest", "label": "Magistral Small" },
-        { "value": "magistral-medium-latest", "label": "Magistral Medium" }
+        { "value": "mistral-small-2603", "label": "Mistral Small 4 (mistral-small-2603)" },
+        { "value": "mistral-medium-3-5", "label": "Mistral Medium 3.5 (mistral-medium-3-5)" }
       ],
-      "default": "magistral-small-latest"
+      "default": "mistral-small-2603"
     }
   ],
   "connector": {
@@ -34,13 +34,14 @@
         "Content-Type": "application/json",
         "Accept": "text/event-stream"
       },
-      "timeoutMs": 60000,
+      "timeoutMs": 120000,
       "stream": true
     },
     "aiPayload": {
       "model": "{{model}}",
+      "reasoning_effort": "high",
       "temperature": 0.7,
-      "max_tokens": 4096,
+      "max_tokens": 8192,
       "stream": true
     },
     "history": {

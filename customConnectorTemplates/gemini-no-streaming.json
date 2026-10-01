@@ -1,6 +1,6 @@
 {
   "name": "Google Gemini — No Streaming",
-  "description": "Connect to Google Gemini via its OpenAI-compatible endpoint. The full response is returned at once.",
+  "description": "Connect to Google Gemini via its OpenAI-compatible endpoint. The full response is returned at once. No temperature is sent: Google recommends leaving it at the default for Gemini 3, and the newest models ignore it.",
   "requiresStreaming": false,
   "fields": [
     {
@@ -15,14 +15,18 @@
       "label": "Model",
       "type": "select",
       "options": [
-        { "value": "gemini-3-flash-preview", "label": "Gemini 3 Flash" },
-        { "value": "gemini-3.1-pro-preview", "label": "Gemini 3.1 Pro" },
-        { "value": "gemini-3.1-flash-lite-preview", "label": "Gemini 3.1 Flash Lite" },
-        { "value": "gemini-2.5-flash", "label": "Gemini 2.5 Flash" },
-        { "value": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash Lite" },
-        { "value": "gemini-2.5-pro", "label": "Gemini 2.5 Pro" }
+        { "value": "gemini-3.8-flash", "label": "Gemini 3.8 Flash" },
+        { "value": "gemini-3.7-flash", "label": "Gemini 3.7 Flash" },
+        { "value": "gemini-3.5-flash-lite", "label": "Gemini 3.5 Flash-Lite" },
+        { "value": "gemini-3.1-flash-lite", "label": "Gemini 3.1 Flash-Lite" },
+        { "value": "gemini-3.1-pro-preview", "label": "Gemini 3.1 Pro (preview)" },
+        { "value": "gemini-3-flash-preview", "label": "Gemini 3 Flash (preview, older model)" },
+        { "value": "gemini-3.1-flash-lite-preview", "label": "Gemini 3.1 Flash-Lite (preview, older model)" },
+        { "value": "gemini-2.5-flash", "label": "Gemini 2.5 Flash (older model, existing Google accounts only)" },
+        { "value": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash-Lite (older model, existing Google accounts only)" },
+        { "value": "gemini-2.5-pro", "label": "Gemini 2.5 Pro (older model, existing Google accounts only)" }
       ],
-      "default": "gemini-3-flash-preview"
+      "default": "gemini-3.8-flash"
     }
   ],
   "connector": {
@@ -37,12 +41,12 @@
       "headers": {
         "Content-Type": "application/json"
       },
-      "timeoutMs": 30000
+      "timeoutMs": 120000
     },
     "aiPayload": {
       "model": "{{model}}",
-      "temperature": 0.7,
-      "max_tokens": 1024
+      "reasoning_effort": "low",
+      "max_tokens": 8192
     },
     "history": {
       "mode": "array",

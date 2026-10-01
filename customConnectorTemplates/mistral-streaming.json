@@ -1,6 +1,6 @@
 {
   "name": "Mistral — Streaming",
-  "description": "Connect to the Mistral API with streaming enabled. Tokens appear in real-time as the model generates them.",
+  "description": "Connect to the Mistral API with streaming enabled. Tokens appear in real-time as the model generates them. Each option is a fixed model version, so the model does not change on its own over time.",
   "requiresStreaming": true,
   "fields": [
     {
@@ -15,11 +15,13 @@
       "label": "Model",
       "type": "select",
       "options": [
-        { "value": "mistral-small-latest", "label": "Mistral Small" },
-        { "value": "mistral-medium-latest", "label": "Mistral Medium" },
-        { "value": "mistral-large-latest", "label": "Mistral Large" }
+        { "value": "mistral-small-2603", "label": "Mistral Small 4 (mistral-small-2603)" },
+        { "value": "mistral-medium-3-5", "label": "Mistral Medium 3.5 (mistral-medium-3-5)" },
+        { "value": "mistral-large-2512", "label": "Mistral Large 3 (mistral-large-2512)" },
+        { "value": "ministral-14b-2512", "label": "Ministral 3 14B (ministral-14b-2512)" },
+        { "value": "ministral-8b-2512", "label": "Ministral 3 8B (ministral-8b-2512)" }
       ],
-      "default": "mistral-small-latest"
+      "default": "mistral-small-2603"
     }
   ],
   "connector": {
