@@ -83,7 +83,7 @@ $users   = min(1000, max(1,  (int) ($_GET['users']   ?? 20)));
 $batches = min(10,  max(1,  (int) ($_GET['batches'] ?? 3)));
 $delay   = min(60,  max(0,  (int) ($_GET['delay']   ?? 5)));
 
-$validModels = ['gpt-5', 'gpt-5-mini', 'gpt-4o', 'gpt-4o-mini'];
+$validModels = ['gpt-6-sol', 'gpt-6-astra', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5', 'gpt-5-mini', 'gpt-4o', 'gpt-4o-mini'];
 $model = in_array($_GET['model'] ?? '', $validModels, true) ? ($_GET['model']) : 'gpt-5-mini';
 
 $validEfforts = ['low', 'medium', 'high'];
@@ -138,7 +138,7 @@ function sample_server_stats(): array
 
 function run_openai_batch(int $count, string $model, string $apiKey, string $reasoning, string $message, int $batchNum = 1, int $totalBatches = 1): array
 {
-    $responsesModels = ['gpt-5', 'gpt-5-mini'];
+    $responsesModels = ['gpt-6-sol', 'gpt-6-astra', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5', 'gpt-5-mini'];
     $useResponsesApi = in_array($model, $responsesModels, true);
     $url = $useResponsesApi
         ? 'https://api.openai.com/v1/responses'
@@ -506,7 +506,7 @@ if ($overlap === 0) {
      * ---------------------------------------------------------- */
 
     // Pre-compute request config (same logic as run_openai_batch)
-    $responsesModels = ['gpt-5', 'gpt-5-mini'];
+    $responsesModels = ['gpt-6-sol', 'gpt-6-astra', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5', 'gpt-5-mini'];
     $useResponsesApi = in_array($model, $responsesModels, true);
     $url       = $useResponsesApi
         ? 'https://api.openai.com/v1/responses'

@@ -44,27 +44,34 @@ OPENAI_CHAT_ENDPOINT = "https://api.openai.com/v1/chat/completions"
 OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses"
 
 # Define models BEFORE using them
-OPENAI_RESPONSES_MODELS = {"gpt-5", "gpt-5-mini"}
-OPENAI_CHAT_MODELS = {"gpt-4o", "gpt-4-mini", "gpt-4", "gpt-4-turbo"}
+OPENAI_RESPONSES_MODELS = {
+    "gpt-6-sol", "gpt-6-astra", "gpt-6-luna",
+    "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
+    "gpt-5", "gpt-5-mini",
+}
+OPENAI_CHAT_MODELS = {"gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo"}
 
 # ===== OpenRouter Configuration =====
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODELS = [
-    "x-ai/grok-code-fast-1",
-    "anthropic/claude-4.5-sonnet-20250929",
-    "anthropic/claude-4-sonnet-20250522",
-    "google/gemini-2.5-flash",
-    "google/gemini-2.0-flash-001",
-    "google/gemini-flash-1.5-8b",
-    "x-ai/grok-4-fast",
-    "deepseek/deepseek-chat-v3-0324",
-    "qwen/qwen3-coder-480b-a35b-07-25",
-    "minimax/minimax-m2",
-    "openchat/openchat-7b",
-    "mistralai/magistral-small-2506",
-    "openai/gpt-4",  # may 404 depending on routing/availability; we'll log the body
-    "meta-llama/llama-3-8b-instruct",
-    "nvidia/llama-3.1-nemotron-70b-instruct",
+    # The models suggested in the study settings (chat-backend-create.php)
+    "anthropic/claude-haiku-4.5",
+    "anthropic/claude-opus-5.5",
+    "anthropic/claude-sonnet-5",
+    "deepseek/deepseek-v4.1-flash",
+    "google/gemini-3.1-flash-lite",
+    "google/gemini-3.8-flash",
+    "google/gemma-4-31b-it",
+    "minimax/minimax-m3",
+    "mistralai/mistral-small-2603",
+    "moonshotai/kimi-k3",
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "openai/gpt-6-luna",
+    "openai/gpt-6-sol",
+    "qwen/qwen3.8-flash",
+    "x-ai/grok-4.7",
+    "xiaomi/mimo-v2.6-pro",
+    "z-ai/glm-5.3",
 ]
 
 # ===== Networking: timeouts, retries =====
