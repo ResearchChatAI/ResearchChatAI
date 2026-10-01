@@ -68,7 +68,6 @@ OPENROUTER_MODELS = [
     "nvidia/nemotron-3-ultra-550b-a55b",
     "openai/gpt-6-luna",
     "openai/gpt-6-sol",
-    "qwen/qwen3.8-flash",
     "x-ai/grok-4.7",
     "xiaomi/mimo-v2.6-pro",
     "z-ai/glm-5.3",

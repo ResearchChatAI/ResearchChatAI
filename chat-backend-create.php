@@ -1458,7 +1458,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
                   'deepseek/deepseek-v4.1-flash', 'google/gemini-3.1-flash-lite', 'google/gemini-3.8-flash',
                   'google/gemma-4-31b-it', 'minimax/minimax-m3', 'mistralai/mistral-small-2603',
                   'moonshotai/kimi-k3', 'nvidia/nemotron-3-ultra-550b-a55b', 'openai/gpt-6-luna',
-                  'openai/gpt-6-sol', 'qwen/qwen3.8-flash', 'x-ai/grok-4.7', 'xiaomi/mimo-v2.6-pro', 'z-ai/glm-5.3',
+                  'openai/gpt-6-sol', 'x-ai/grok-4.7', 'xiaomi/mimo-v2.6-pro', 'z-ai/glm-5.3',
                 ];
                 // Suggested earlier and still offered by OpenRouter (kept for studies that want the same model as before)
                 $openrouterOlderModels = [
