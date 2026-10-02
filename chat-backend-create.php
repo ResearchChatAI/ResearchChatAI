@@ -1427,6 +1427,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
                   placeholder="e.g., sk-..." value="<?php echo $study["openrouterApiKey"]; ?>" style="max-width: 450px;">
                 <p class="help">Note: You require an OpenRouter API key to use their services.</p>
                 <p class="help">The backend uses a fixed seed of 1106 for models that support a seed.</p>
+                <p class="help">Replies are limited to 8000 tokens (roughly 6,000 words). Thinking that a model does before it answers counts towards this limit.</p>
               </div>
             </div>
 
@@ -1480,17 +1481,6 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
                     <span class="or-model-tag tag is-light" title="Choose" style="cursor:pointer; margin: 2px;"><?php echo htmlspecialchars($openrouterTag, ENT_QUOTES, 'UTF-8'); ?></span>
                   <?php endforeach; ?>
                 </p>
-              </div>
-            </div>
-
-            <!--Response limit-->
-            <div class="field mt-5">
-              <label class="label has-text-left" id="openRouterMaxTokensLabel">Maximum response length (tokens)</label>
-              <div class="control">
-                <input id="openrouterMaxTokensInput" class="input trackChanges" fieldKey="openrouterMaxTokens" saveIndicatorElement="#openRouterMaxTokensLabel" type="text" inputmode="numeric"
-                  placeholder="1500" value="<?php echo htmlspecialchars((string) ($study["openrouterMaxTokens"] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" style="max-width: 450px;">
-                <p class="help">Note: The longest reply the model may produce. Many current models think before they answer, and that thinking counts towards this limit, so a low value can cut a reply off or leave it empty. New studies start with 8000.</p>
-                <p class="help">If this field is empty, the study keeps the previous fixed limit of 1500 tokens and waits up to 30 seconds for a reply. With a value, it waits up to 120 seconds.</p>
               </div>
             </div>
 

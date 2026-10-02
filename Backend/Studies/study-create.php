@@ -148,17 +148,7 @@ function createStudy($database, int $userID, string $studyName): array
             $result['message'] = 'Failed to create study';
             return $result;
         }
-
-        // New studies start with a response limit for OpenRouter that leaves room for
-        // models that think before answering. Studies created earlier have no value and
-        // keep the original fixed limit (see Backend/Chat/connectors/openrouter.php).
-        // Done as a separate step so a database without this column can still create studies.
-        try {
-            $database->update("studies", ["openrouterMaxTokens" => "8000"], ["studyID" => $insertedID]);
-        } catch (Throwable $e) {
-            error_log("Could not set openrouterMaxTokens for study $insertedID: " . $e->getMessage());
-        }
-
+        
         $result['success'] = true;
         $result['studyID'] = (int)$insertedID;
         $result['message'] = 'Study created successfully';

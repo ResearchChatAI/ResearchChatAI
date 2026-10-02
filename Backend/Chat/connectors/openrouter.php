@@ -28,7 +28,7 @@ $connector = [
     'request' => [
         'url'       => 'https://openrouter.ai/api/v1/chat/completions',
         'method'    => 'POST',
-        'timeoutMs' => 30000,
+        'timeoutMs' => 120000,
         'auth'      => ['type' => 'bearer', 'token' => $study['openrouterApiKey'] ?? ''],
         'headers'   => [
             'Content-Type' => 'application/json',
@@ -41,7 +41,12 @@ $connector = [
         'model'       => $study['openrouterModel'] ?? 'nvidia/llama-3.1-nemotron-70b-instruct',
         'temperature' => (float) ($study['openrouterTemperature'] ?? 0.9),
         'seed'        => 1106,
-        'max_tokens'  => 1500,
+        /* Longest reply the model may produce, thinking included. High enough for
+           long answers from models that think before they answer, and low enough
+           that the reply still fits the database field it is stored in (65,535
+           bytes, less once encrypted). OpenRouter lowers the value by itself for
+           models that cannot produce this much. */
+        'max_tokens'  => 8000,
         'stream'      => $streamFlag,
     ],
     'history'  => ['mode' => 'array'],
@@ -49,29 +54,3 @@ $connector = [
         'resultPath' => '$.choices[0].message.content',
     ],
 ];
-
-/* ---- Response limit (optional, per study) ----
- *
- * Studies created before this setting existed have no value. They keep the
- * original limit and timeout above, so they send exactly the same request
- * as before. Only a study with a value gets its own limit, plus the longer
- * timeout that models which think before answering need.
- *
- * The value is read here on its own (and not added to the column list in
- * prepareChat.php) so that a database without the column simply behaves
- * as before instead of failing.
- */
-
-$maxTokensSetting = $study['openrouterMaxTokens'] ?? null;
-if ($maxTokensSetting === null && isset($database, $study['studyID'])) {
-    try {
-        $maxTokensSetting = $database->get('studies', 'openrouterMaxTokens', ['studyID' => $study['studyID']]);
-    } catch (\Throwable $e) {
-        $maxTokensSetting = null;
-    }
-}
-
-if (is_numeric($maxTokensSetting) && (int) $maxTokensSetting > 0) {
-    $connector['aiPayload']['max_tokens'] = min((int) $maxTokensSetting, 128000);
-    $connector['request']['timeoutMs']    = 120000;
-}
