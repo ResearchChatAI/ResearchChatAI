@@ -109,6 +109,25 @@ $aiMsgToStore = (!empty($study['isEncrypted']) && $publicKey)
     ? encryptMessageWithPublicKey($message, $publicKey)
     : $message;
 
+/* The reply is stored in messages.messageText, which holds 65,535 bytes. The database
+   would cut off a longer reply, and an encrypted one that is cut off can no longer be
+   decrypted. So a reply that does not fit is shortened until it does, with a note at
+   the end. The participant has already seen the whole reply. */
+$messageFieldBytes = 65535;
+if (strlen($aiMsgToStore) > $messageFieldBytes) {
+    $note = "\n\n[Shortened by ResearchChatAI: this reply had " . mb_strlen($message, 'UTF-8')
+          . " characters, too many to store in full. The participant saw the complete reply.]";
+    $keep = (int) (strlen($message) * $messageFieldBytes / strlen($aiMsgToStore)) - strlen($note) - 64;
+    for ($attempt = 0; $attempt < 8 && $keep > 0; $attempt++) {
+        $shortened    = mb_strcut($message, 0, $keep, 'UTF-8') . $note;
+        $aiMsgToStore = (!empty($study['isEncrypted']) && $publicKey)
+            ? encryptMessageWithPublicKey($shortened, $publicKey)
+            : $shortened;
+        if (strlen($aiMsgToStore) <= $messageFieldBytes) break;
+        $keep -= 1024;
+    }
+}
+
 $aiVarsToStore = (!empty($study['isEncrypted']) && $publicKey)
     ? encryptMessageWithPublicKey($passedVariables, $publicKey)
     : $passedVariables;

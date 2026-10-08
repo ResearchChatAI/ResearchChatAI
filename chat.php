@@ -1679,6 +1679,38 @@ if ($study['dataCollectionActive'] == 0) {
             return 'e2e:' + toB64(encryptedKey) + ':' + toB64(iv) + ':' + toB64(encryptedData);
         }
 
+        /**
+         * The reply as it is sent for storage: encrypted when a public key is available.
+         * The database field holds 65,535 bytes. It would cut off a longer reply, and an
+         * encrypted one that is cut off can no longer be decrypted. So a reply that does not
+         * fit is shortened until it does, with a note at the end (the same note as in
+         * saveResponse.php). The participant has already seen the whole reply.
+         *
+         * @param {string} text - The reply as shown to the participant
+         * @param {CryptoKey|null} rsaKey - Imported RSA public key
+         * @param {boolean} encrypt - Whether to encrypt
+         * @returns {Promise<string>} What to store
+         */
+        async function _e2eReplyForStorage(text, rsaKey, encrypt) {
+            var fieldBytes = 65535;
+            var size = function(s) { return new TextEncoder().encode(s).length; };
+            var stored = encrypt ? await _e2eEncrypt(text, rsaKey) : text;
+            if (size(stored) <= fieldBytes) return stored;
+
+            var note = '\n\n[Shortened by ResearchChatAI: this reply had ' + Array.from(text).length
+                     + ' characters, too many to store in full. The participant saw the complete reply.]';
+            var bytes = new TextEncoder().encode(text);
+            var keep = Math.floor(bytes.length * fieldBytes / size(stored)) - size(note) - 64;
+            for (var attempt = 0; attempt < 8 && keep > 0; attempt++) {
+                // Cut on a character boundary: a character split in two decodes as U+FFFD, which is dropped
+                var shortened = new TextDecoder().decode(bytes.slice(0, keep)).replace(/\uFFFD+$/, '') + note;
+                stored = encrypt ? await _e2eEncrypt(shortened, rsaKey) : shortened;
+                if (size(stored) <= fieldBytes) break;
+                keep -= 1024;
+            }
+            return stored;
+        }
+
         // Cache the imported public key
         var _e2eCachedKey = null;
         async function _e2eGetPublicKey() {
@@ -2165,7 +2197,7 @@ if ($study['dataCollectionActive'] == 0) {
                             $('#typing-dots').hide();
 
                             // Save AI response (encrypted if public key available, plaintext otherwise)
-                            var aiMsgToSave = hasEncryption ? await _e2eEncrypt(assistantText, rsaKey) : assistantText;
+                            var aiMsgToSave = await _e2eReplyForStorage(assistantText, rsaKey, hasEncryption);
                             fetch(baseURL + 'Backend/Chat/saveE2EMessage.php', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
@@ -2239,7 +2271,7 @@ if ($study['dataCollectionActive'] == 0) {
                             $assistantBubble.find('.text').html(markdownConverter.makeHtml(msgText));
 
                             // Save AI response (encrypted if public key available, plaintext otherwise)
-                            var aiMsgToSave2 = hasEncryption ? await _e2eEncrypt(msgText, rsaKey) : msgText;
+                            var aiMsgToSave2 = await _e2eReplyForStorage(msgText, rsaKey, hasEncryption);
                             fetch(baseURL + 'Backend/Chat/saveE2EMessage.php', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
