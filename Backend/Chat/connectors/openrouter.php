@@ -41,12 +41,9 @@ $connector = [
         'model'       => $study['openrouterModel'] ?? 'nvidia/llama-3.1-nemotron-70b-instruct',
         'temperature' => (float) ($study['openrouterTemperature'] ?? 0.9),
         'seed'        => 1106,
-        /* Longest reply the model may produce, thinking included. High enough for
-           long answers from models that think before they answer, and low enough
-           that the reply still fits the database field it is stored in (65,535
-           bytes, less once encrypted). OpenRouter lowers the value by itself for
-           models that cannot produce this much. */
-        'max_tokens'  => 8000,
+        /* Longest reply the model may produce, thinking included. OpenRouter
+           lowers the value by itself for models that cannot produce this much. */
+        'max_tokens'  => 16000,
         'stream'      => $streamFlag,
     ],
     'history'  => ['mode' => 'array'],

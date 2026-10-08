@@ -1427,7 +1427,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
                   placeholder="e.g., sk-..." value="<?php echo $study["openrouterApiKey"]; ?>" style="max-width: 450px;">
                 <p class="help">Note: You require an OpenRouter API key to use their services.</p>
                 <p class="help">The backend uses a fixed seed of 1106 for models that support a seed.</p>
-                <p class="help">Replies are limited to 8000 tokens (roughly 6,000 words). Thinking that a model does before it answers counts towards this limit.</p>
+                <p class="help">Replies are limited to 16000 tokens (roughly 12,000 words). Thinking that a model does before it answers counts towards this limit.</p>
               </div>
             </div>
 
