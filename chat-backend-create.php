@@ -698,7 +698,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
         <div id="nextButtonSettings" <?php echo ($study["hideNextButton"] == 1) ? "style='display: none;'" : ""; ?>>
           <div class="field mt-4">
             <label class="label">"Close"-button label</label>
-            <input type="text" id="nextButtonLabelInput" class="input trackChanges" fieldKey="nextButtonLabel" saveIndicatorElement="#closeButtonTitle" placeholder="Default: End interaction" value="<?php echo $study["nextButtonLabel"]; ?>">
+            <input type="text" id="nextButtonLabelInput" class="input trackChanges" fieldKey="nextButtonLabel" saveIndicatorElement="#closeButtonTitle" placeholder="Default: End interaction" value="<?php echo htmlspecialchars((string) $study["nextButtonLabel"], ENT_QUOTES, 'UTF-8'); ?>">
           </div>
 
           <div class="columns mt-3">
@@ -706,21 +706,21 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               <label class="label has-text-left">"Close"-button background color</label>
               <div class="control circle colorPickerContainer" id="nextButtonBgColorContainer">
                 <input class="coloris trackChanges" fieldKey="nextButtonBgColor" saveIndicatorElement="#closeButtonTitle" type="text"
-                  placeholder="Default: #477eac" value="<?php echo $study["nextButtonBgColor"]; ?>" data-coloris>
+                  placeholder="Default: #477eac" value="<?php echo htmlspecialchars((string) $study["nextButtonBgColor"], ENT_QUOTES, 'UTF-8'); ?>" data-coloris>
               </div>
             </div>
             <div class="column">
               <label class="label has-text-left">"Close"-button text color</label>
               <div class="control circle colorPickerContainer" id="nextButtonTextColorContainer">
                 <input class="coloris trackChanges" fieldKey="nextButtonTextColor" saveIndicatorElement="#closeButtonTitle" type="text"
-                  placeholder="Default: #ffffff" value="<?php echo $study["nextButtonTextColor"]; ?>" data-coloris>
+                  placeholder="Default: #ffffff" value="<?php echo htmlspecialchars((string) $study["nextButtonTextColor"], ENT_QUOTES, 'UTF-8'); ?>" data-coloris>
               </div>
             </div>
           </div>
 
           <div class="field mt-4">
             <label class="label">Redirect Website URL (optional)</label>
-            <input type="text" id="redirectURLInput" class="input trackChanges" fieldKey="redirectURL" saveIndicatorElement="#closeButtonTitle" placeholder="e.g., https://qualtrics.com/..." value="<?php echo $study["redirectURL"]; ?>">
+            <input type="text" id="redirectURLInput" class="input trackChanges" fieldKey="redirectURL" saveIndicatorElement="#closeButtonTitle" placeholder="e.g., https://qualtrics.com/..." value="<?php echo htmlspecialchars((string) $study["redirectURL"], ENT_QUOTES, 'UTF-8'); ?>">
           </div>
 
           <!--Protip START-->
@@ -1162,14 +1162,14 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               <label class="label has-text-left">"Send"-button background color</label>
               <div class="control circle colorPickerContainer">
                 <input id="sendButtonBgColorInput" class="coloris trackChanges" fieldKey="sendButtonBgColor" saveIndicatorElement="#chatAppearanceTitle" type="text"
-                  placeholder="Default: #00b894" value="<?php echo $study["sendButtonBgColor"]; ?>" data-coloris>
+                  placeholder="Default: #00b894" value="<?php echo htmlspecialchars((string) $study["sendButtonBgColor"], ENT_QUOTES, 'UTF-8'); ?>" data-coloris>
               </div>
             </div>
             <div class="column">
               <label class="label has-text-left">"Send"-button text color</label>
               <div class="control circle colorPickerContainer">
                 <input id="sendButtonTextColorInput" class="coloris trackChanges" fieldKey="sendButtonTextColor" saveIndicatorElement="#chatAppearanceTitle" type="text"
-                  placeholder="Default: #ffffff" value="<?php echo $study["sendButtonTextColor"]; ?>" data-coloris>
+                  placeholder="Default: #ffffff" value="<?php echo htmlspecialchars((string) $study["sendButtonTextColor"], ENT_QUOTES, 'UTF-8'); ?>" data-coloris>
               </div>
             </div>
           </div>
@@ -1180,14 +1180,14 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               <label class="label has-text-left">"User bubble" background color</label>
               <div class="control circle colorPickerContainer">
                 <input id="userBubbleBgColorInput" class="coloris trackChanges" fieldKey="userBubbleBgColor" saveIndicatorElement="#chatAppearanceTitle" type="text"
-                  placeholder="Default: #0984e3" value="<?php echo $study["userBubbleBgColor"]; ?>" data-coloris>
+                  placeholder="Default: #0984e3" value="<?php echo htmlspecialchars((string) $study["userBubbleBgColor"], ENT_QUOTES, 'UTF-8'); ?>" data-coloris>
               </div>
             </div>
             <div class="column">
               <label class="label has-text-left">"User bubble" text color</label>
               <div class="control circle colorPickerContainer">
                 <input id="userBubbleTextColorInput" class="coloris trackChanges" fieldKey="userBubbleTextColor" saveIndicatorElement="#chatAppearanceTitle"
-                  type="text" placeholder="Default: #ffffff" value="<?php echo $study["userBubbleTextColor"]; ?>" data-coloris>
+                  type="text" placeholder="Default: #ffffff" value="<?php echo htmlspecialchars((string) $study["userBubbleTextColor"], ENT_QUOTES, 'UTF-8'); ?>" data-coloris>
               </div>
             </div>
           </div>
@@ -1198,14 +1198,14 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               <label class="label has-text-left">"AI bubble" background color</label>
               <div class="control circle colorPickerContainer">
                 <input id="aiBubbleBgColorInput" class="coloris trackChanges" fieldKey="aiBubbleBgColor" saveIndicatorElement="#chatAppearanceTitle" type="text"
-                  placeholder="Default: #dfe6e9" value="<?php echo $study["aiBubbleBgColor"]; ?>" data-coloris>
+                  placeholder="Default: #dfe6e9" value="<?php echo htmlspecialchars((string) $study["aiBubbleBgColor"], ENT_QUOTES, 'UTF-8'); ?>" data-coloris>
               </div>
             </div>
             <div class="column">
               <label class="label has-text-left">"AI bubble" text color</label>
               <div class="control circle colorPickerContainer">
                 <input id="aiBubbleTextColorInput" class="coloris trackChanges" fieldKey="aiBubbleTextColor" saveIndicatorElement="#chatAppearanceTitle" type="text"
-                  placeholder="Default: #000000" value="<?php echo $study["aiBubbleTextColor"]; ?>" data-coloris>
+                  placeholder="Default: #000000" value="<?php echo htmlspecialchars((string) $study["aiBubbleTextColor"], ENT_QUOTES, 'UTF-8'); ?>" data-coloris>
               </div>
             </div>
           </div>
@@ -1319,7 +1319,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               <label class="label has-text-left" id="openAiKeyLabel"> OpenAI API Key</label>
               <div class="control">
                 <input id="openAiApiKeyInput" class="input trackChanges" fieldKey="openaiApiKey" saveIndicatorElement="#openAiKeyLabel" type="text"
-                  placeholder="e.g., sk-..." value="<?php echo $study["openaiApiKey"]; ?>" style="max-width: 450px;">
+                  placeholder="e.g., sk-..." value="<?php echo htmlspecialchars((string) $study["openaiApiKey"], ENT_QUOTES, 'UTF-8'); ?>" style="max-width: 450px;">
                 <p class="help">Note: You require an OpenAI API key to use their services.</p>
                 </p>
               </div>
@@ -1329,7 +1329,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               <label class="label has-text-left" id="openAiTemperatureLabel">Temperature</label>
               <div class="control">
                 <input id="openaiTemperatureInput" class="input trackChanges" fieldKey="openaiTemperature" saveIndicatorElement="#openAiTemperatureLabel" type="text"
-                  placeholder="Default: 0.8" value="<?php echo $study["openaiTemperature"]; ?>" style="max-width: 450px;">
+                  placeholder="Default: 0.8" value="<?php echo htmlspecialchars((string) $study["openaiTemperature"], ENT_QUOTES, 'UTF-8'); ?>" style="max-width: 450px;">
                 <p class="help">Note: The temperature parameter controls the randomness of the output. Lower temperatures make the model more confident, while higher temperatures make the model more creative. The default value is 0.8.</p>
                 <!-- Filled in for models that do not use the temperature (see updateOpenAiModelSettings) -->
                 <p class="help has-text-danger" id="openaiTemperatureNote" style="display:none;"></p>
@@ -1424,7 +1424,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               <label class="label has-text-left" id="openRouterKeyLabel">OpenRouter API Key</label>
               <div class="control">
                 <input id="openRouterApiKeyInput" class="input trackChanges" fieldKey="openrouterApiKey" saveIndicatorElement="#openRouterKeyLabel" type="text"
-                  placeholder="e.g., sk-..." value="<?php echo $study["openrouterApiKey"]; ?>" style="max-width: 450px;">
+                  placeholder="e.g., sk-..." value="<?php echo htmlspecialchars((string) $study["openrouterApiKey"], ENT_QUOTES, 'UTF-8'); ?>" style="max-width: 450px;">
                 <p class="help">Note: You require an OpenRouter API key to use their services.</p>
                 <p class="help">The backend uses a fixed seed of 1106 for models that support a seed.</p>
                 <p class="help">Replies are limited to 16000 tokens (roughly 12,000 words). Thinking that a model does before it answers counts towards this limit.</p>
@@ -1436,7 +1436,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               <label class="label has-text-left" id="openRouterTemperatureLabel">Temperature</label>
               <div class="control">
                 <input id="openrouterTemperatureInput" class="input trackChanges" fieldKey="openrouterTemperature" saveIndicatorElement="#openRouterTemperatureLabel" type="text"
-                  placeholder="Default: 0.8" value="<?php echo $study["openrouterTemperature"]; ?>" style="max-width: 450px;">
+                  placeholder="Default: 0.8" value="<?php echo htmlspecialchars((string) $study["openrouterTemperature"], ENT_QUOTES, 'UTF-8'); ?>" style="max-width: 450px;">
                 <p class="help">Note: The temperature parameter controls the randomness of the output. Lower temperatures make the model more confident, while higher temperatures make the model more creative. The default value is 0.8.</p>
               </div>
             </div>
@@ -1447,7 +1447,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               <div class="control">
                 <div style="position: relative; max-width: 450px; display: inline-block; width: 100%;">
                   <input id="openrouterModelInput" class="input trackChanges" fieldKey="openrouterModel" saveIndicatorElement="#openRouterModelLabel" type="text"
-                    placeholder="e.g., anthropic/claude-sonnet-5" value="<?php echo $study["openrouterModel"]; ?>" autocomplete="off">
+                    placeholder="e.g., anthropic/claude-sonnet-5" value="<?php echo htmlspecialchars((string) $study["openrouterModel"], ENT_QUOTES, 'UTF-8'); ?>" autocomplete="off">
                   <div id="orModelDropdown" style="display:none; position:absolute; left:0; right:0; top:100%; z-index:50; max-height:250px; overflow-y:auto; background:#fff; border:1px solid #dbdbdb; border-top:none; border-radius:0 0 4px 4px; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
                   </div>
                 </div>
@@ -1894,7 +1894,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
           <label class="label has-text-left">"Submission"-placeholder text</label>
           <div class="control">
             <input id="submissionPlaceholderInput" class="input trackChanges" fieldKey="submissionPlaceholder" saveIndicatorElement="#submissionsWindowTitle" type="text"
-              placeholder="Default: Please provide your answer here." value="<?php echo $study["submissionPlaceholder"]; ?>" style="max-width: 450px;">
+              placeholder="Default: Please provide your answer here." value="<?php echo htmlspecialchars((string) $study["submissionPlaceholder"], ENT_QUOTES, 'UTF-8'); ?>" style="max-width: 450px;">
           </div>
         </div>
 
@@ -1939,7 +1939,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               </div>
               <div class="control mt-2">
                 <input id="maxWordCountInput" class="input trackChanges" fieldKey="maxWordCount" saveIndicatorElement="#submissionsWindowTitle" type="number"
-                  placeholder="e.g., 100" value="<?php echo $study["maxWordCount"]; ?>" style="max-width: 450px;">
+                  placeholder="e.g., 100" value="<?php echo htmlspecialchars((string) $study["maxWordCount"], ENT_QUOTES, 'UTF-8'); ?>" style="max-width: 450px;">
               </div>
             </div>
           </div>
@@ -2044,7 +2044,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
           </label>
           <div class="control">
             <input id="maxNumberAiMessagesInput" class="input trackChanges" fieldKey="maxNumberAiMessages" saveIndicatorElement="#chatSettingsTitle" type="text"
-              placeholder="Default: no limit" value="<?php echo $study["maxNumberAiMessages"] ?: ''; ?>" style="max-width: 450px;">
+              placeholder="Default: no limit" value="<?php echo htmlspecialchars((string) ($study["maxNumberAiMessages"] ?: ''), ENT_QUOTES, 'UTF-8'); ?>" style="max-width: 450px;">
           </div>
           <!--Help box START-->
           <div class="mbHelpBox notification is-info is-light mt-3" id="maxNumberAiMessagesHelp">
@@ -2069,7 +2069,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
           </label>
           <div class="control">
             <input id="maxNumberParticipantMessagesInput" class="input trackChanges" fieldKey="maxNumberParticipantMessages" saveIndicatorElement="#chatSettingsTitle" type="text"
-              placeholder="Default: no limit" value="<?php echo $study["maxNumberParticipantMessages"] ?: ''; ?>" style="max-width: 450px;">
+              placeholder="Default: no limit" value="<?php echo htmlspecialchars((string) ($study["maxNumberParticipantMessages"] ?: ''), ENT_QUOTES, 'UTF-8'); ?>" style="max-width: 450px;">
           </div>
 
           <!--Help box START-->
@@ -2184,7 +2184,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
             <label class="label has-text-left">Timer duration (in minutes)</label>
             <div class="control">
               <input id="timerDurationInput" class="input trackChanges" fieldKey="timerDuration" saveIndicatorElement="#timerSettingsTitle" type="text"
-                placeholder="Default: 10 min" value="<?php echo $study["timerDuration"]; ?>" style="max-width: 450px;">
+                placeholder="Default: 10 min" value="<?php echo htmlspecialchars((string) $study["timerDuration"], ENT_QUOTES, 'UTF-8'); ?>" style="max-width: 450px;">
             </div>
           </div>
           <div class="field mt-5">
@@ -2198,7 +2198,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
           <div class="field mt-3" id="endOfTimerMessageInputContainer" <?php echo ($study["hideEndOfTimerMessage"] == 1) ? "style='display:none;'" : ""; ?>>
             <div class="control">
               <input id="endOfTimerMessageInput" class="input trackChanges" fieldKey="endOfTimerMessage" saveIndicatorElement="#timerSettingsTitle" type="text"
-                placeholder="Default: Your time is up." value="<?php echo $study["endOfTimerMessage"]; ?>"
+                placeholder="Default: Your time is up." value="<?php echo htmlspecialchars((string) $study["endOfTimerMessage"], ENT_QUOTES, 'UTF-8'); ?>"
                 style="max-width: 450px;">
             </div>
           </div>
@@ -2484,7 +2484,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               <!--Participant ID input-->
               <div class="field mt-3 ml-5 has-background-light p-2 pl-5" id="participantIdShareLinkInputContainer" <?php echo ($study["includeParticipantIdInLink"] == 1) ? "" : "style='display:none;'"; ?>>
                 <label class="label has-text-left" style="display: inline; line-height: 40px;">Participant ID: </label>
-                <input class="input ml-2 trackChanges" id="participantIdShareLinkInput" fieldKey="participantIdInLink" type="text" placeholder="e.g., TestUser, ${e://Field/participantID}" style="max-width: 280px;" value="<?php echo $study["participantIdInLink"]; ?>" oninput="updateDistributionLink()" />
+                <input class="input ml-2 trackChanges" id="participantIdShareLinkInput" fieldKey="participantIdInLink" type="text" placeholder="e.g., TestUser, ${e://Field/participantID}" style="max-width: 280px;" value="<?php echo htmlspecialchars((string) $study["participantIdInLink"], ENT_QUOTES, 'UTF-8'); ?>" oninput="updateDistributionLink()" />
               </div>
             </div>
 
@@ -2583,7 +2583,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
               <!--Participant ID input-->
               <div class="field mt-3 ml-5 has-background-light p-2 pl-5" id="participantIdEmbedInputContainer" <?php echo ($study["includeParticipantIdInEmbed"] == 1) ? "" : "style='display:none;'"; ?>>
                 <label class="label has-text-left" style="display: inline; line-height: 40px;">Participant ID: </label>
-                <input class="input ml-2 trackChanges" id="participantIdEmbedInput" fieldKey="participantIdInEmbed" type="text" placeholder="e.g., TestUser, ${e://Field/participantID}" style="max-width: 280px;" value="<?php echo $study["participantIdInEmbed"]; ?>" oninput="updateDistributionLink()" />
+                <input class="input ml-2 trackChanges" id="participantIdEmbedInput" fieldKey="participantIdInEmbed" type="text" placeholder="e.g., TestUser, ${e://Field/participantID}" style="max-width: 280px;" value="<?php echo htmlspecialchars((string) $study["participantIdInEmbed"], ENT_QUOTES, 'UTF-8'); ?>" oninput="updateDistributionLink()" />
               </div>
 
               <!--Help box START-->
@@ -2645,7 +2645,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
                   <span class="label has-text-left">Max width (px or %) <button class="mbHelpButton" mbHelpTarget="#embedDimensionsHelp"><i class="fa fa-question"></i></button></span>
                   <div class="control">
                     <input id="studyEmbedWidthInput" class="input trackChanges" fieldKey="studyEmbedWidth" type="text"
-                      placeholder="Default: 600px" value="<?php echo $study["studyEmbedWidth"]; ?>" style="max-width: 450px;" oninput="updateDistributionLink()">
+                      placeholder="Default: 600px" value="<?php echo htmlspecialchars((string) $study["studyEmbedWidth"], ENT_QUOTES, 'UTF-8'); ?>" style="max-width: 450px;" oninput="updateDistributionLink()">
                   </div>
                 </div>
               </div>
@@ -2654,7 +2654,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
                   <span class="label has-text-left">Max height (px or %) <button class="mbHelpButton" mbHelpTarget="#embedDimensionsHelp"><i class="fa fa-question"></i></button></span>
                   <div class="control">
                     <input id="studyEmbedHeightInput" class="input trackChanges" fieldKey="studyEmbedHeight" type="text"
-                      placeholder="Default: 750px" value="<?php echo $study["studyEmbedHeight"]; ?>" style="max-width: 450px;" oninput="updateDistributionLink()">
+                      placeholder="Default: 750px" value="<?php echo htmlspecialchars((string) $study["studyEmbedHeight"], ENT_QUOTES, 'UTF-8'); ?>" style="max-width: 450px;" oninput="updateDistributionLink()">
                   </div>
                 </div>
               </div>

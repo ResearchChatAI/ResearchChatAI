@@ -222,18 +222,21 @@ if ($study['dataCollectionActive'] == 0) {
  * "Hello {{name}}" with ?name=John becomes "Hello John"
  * 
  * @param string $template Template string with {{key}} placeholders
+ * @param bool $escapeHtml Escape the inserted URL values for HTML output.
+ *                         The template itself (the researcher's text) is left as is.
  * @return string Processed string with placeholders replaced
  */
-function processTemplate($template)
+function processTemplate($template, bool $escapeHtml = false)
 {
     global $getVariables;
 
     // Replace all placeholders in the format {{key}} with the corresponding GET variable value
-    $processedTemplate = preg_replace_callback('/\{\{(\w+)\}\}/', function ($matches) use ($getVariables) {
+    $processedTemplate = preg_replace_callback('/\{\{(\w+)\}\}/', function ($matches) use ($getVariables, $escapeHtml) {
         $key = $matches[1]; // Extract the key from the placeholder
         // Replace with the value if it exists in $_GET, or an empty string if not
-        return isset($getVariables[$key]) ? $getVariables[$key] : '';
-    }, $template);
+        $value = isset($getVariables[$key]) && is_string($getVariables[$key]) ? $getVariables[$key] : '';
+        return $escapeHtml ? htmlspecialchars($value, ENT_QUOTES, 'UTF-8') : $value;
+    }, (string) $template);
 
     return $processedTemplate;
 }
@@ -242,11 +245,28 @@ function processTemplate($template)
  * Get a study-level configuration value with placeholder processing.
  * Falls back to $default if the field is empty or missing.
  */
-function getStudyValue(string $key, $default = 0)
+function getStudyValue(string $key, $default = 0, bool $escapeHtml = false)
 {
     global $study;
 
-    return isset($study) && is_array($study) && isset($study[$key]) && $study[$key] != "" ? processTemplate($study[$key]) : processTemplate($default);
+    return isset($study) && is_array($study) && isset($study[$key]) && $study[$key] != "" ? processTemplate($study[$key], $escapeHtml) : processTemplate($default, $escapeHtml);
+}
+
+/**
+ * Escape a value for use inside an HTML attribute (e.g. placeholder="...").
+ * Entities a researcher already typed (like &quot;) are kept as they are.
+ */
+function attr($value): string
+{
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8', false);
+}
+
+/**
+ * Encode a value as a JavaScript string literal that is safe inside <script>.
+ */
+function jsString($value): string
+{
+    return json_encode((string) $value, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
 }
 
 /**
@@ -274,12 +294,14 @@ function sanitizeCssColor(string $value, string $default): string
  * Get a condition-specific study value from the experimental conditions array.
  * Falls back to condition 0's value, then to $fallbackValue.
  */
-function getConditionalStudyValue($attributeKey, $fallbackValue = "")
+function getConditionalStudyValue($attributeKey, $fallbackValue = "", bool $escapeHtml = false)
 {
     global $study, $conditionNumber;
 
-    // Decode the JSON from the specified attribute key in the $study array
-    $attributeArray = json_decode(getStudyValue($attributeKey, '[]'), true);
+    // Decode the JSON from the specified attribute key in the $study array.
+    // Placeholders are filled in further down, per value, not in the raw JSON.
+    $rawJson = isset($study) && is_array($study) && isset($study[$attributeKey]) && $study[$attributeKey] != "" ? $study[$attributeKey] : '[]';
+    $attributeArray = json_decode($rawJson, true);
 
     // Initialize the selected attribute value
     $selectedAttribute = "";
@@ -294,7 +316,7 @@ function getConditionalStudyValue($attributeKey, $fallbackValue = "")
     }
 
     // Return the fallback value if the selected attribute is still empty
-    return $selectedAttribute !== "" ? processTemplate($selectedAttribute) : processTemplate($fallbackValue);
+    return $selectedAttribute !== "" ? processTemplate($selectedAttribute, $escapeHtml) : processTemplate($fallbackValue, $escapeHtml);
 }
 
 // =============================================================================
@@ -517,7 +539,7 @@ if ($study['dataCollectionActive'] == 0) {
     <div id="timeUpModal" class="modal">
         <div class="modal-content">
             <p>
-                <?php echo getStudyValue("endOfTimerMessage", "Your time is up."); ?>
+                <?php echo getStudyValue("endOfTimerMessage", "Your time is up.", true); ?>
             </p>
             <button id="timeIsUpOkBtn">Ok</button>
         </div>
@@ -532,7 +554,7 @@ if ($study['dataCollectionActive'] == 0) {
 
     <div id="welcomeModal" class="modal">
         <div class="modal-content">
-            <p><?php echo getStudyValue("welcomeMessage", "Welcome to this study!"); ?></p>
+            <p><?php echo getStudyValue("welcomeMessage", "Welcome to this study!", true); ?></p>
             <button id="startButton" onclick="closeWelcomeModal()">Start</button>
         </div>
     </div>
@@ -554,7 +576,7 @@ if ($study['dataCollectionActive'] == 0) {
                                 class="fas fa-chevron-up"></i>
                         </div>
                         <div id="descriptionContent" style="display:block;">
-                            <?php echo getConditionalStudyValue("participantInstructions"); ?>
+                            <?php echo getConditionalStudyValue("participantInstructions", "", true); ?>
                             <br>
                         </div>
                     </div>
@@ -590,7 +612,7 @@ if ($study['dataCollectionActive'] == 0) {
                         <?php $hideNextButton = getStudyValue("hideNextButton", 1);
                         if ($hideNextButton == 0): ?>
                             <div class="pill3" id="submit-pill">
-                                <span><?php echo getStudyValue("nextButtonLabel", "End interaction"); ?></span>
+                                <span><?php echo getStudyValue("nextButtonLabel", "End interaction", true); ?></span>
                                 <span class="divider"></span>
                                 <span class="icon"><i class="fa fa-arrow-circle-right"></i></span>
                             </div>
@@ -601,7 +623,7 @@ if ($study['dataCollectionActive'] == 0) {
                 <?php $hideSubmissionWindow = getStudyValue("hideSubmissionWindow", 0);
                 if ($hideSubmissionWindow == 0): ?>
                     <textarea id="taskSubmissionTextarea"
-                        placeholder="<?php echo getStudyValue("submissionPlaceholder", "Please provide your answer here."); ?>"></textarea>
+                        placeholder="<?php echo attr(getStudyValue("submissionPlaceholder", "Please provide your answer here.")); ?>"></textarea>
                 <?php endif; ?>
             </div>
 
@@ -622,7 +644,7 @@ if ($study['dataCollectionActive'] == 0) {
                         <?php $hideNextButton = getStudyValue("hideNextButton", 1);
                         if ($hideNextButton == 0): ?>
                             <div class="pill3" id="submit-pill">
-                                <span><?php echo getStudyValue("nextButtonLabel", "End interaction"); ?></span>
+                                <span><?php echo getStudyValue("nextButtonLabel", "End interaction", true); ?></span>
                                 <span class="divider"></span>
                                 <span class="icon"><i class="fa fa-arrow-circle-right"></i></span>
                             </div>
@@ -635,16 +657,16 @@ if ($study['dataCollectionActive'] == 0) {
                         <div class="user-info">
                             <?php $hideAiAvatar = getStudyValue("hideAiAvatar", 0);
                             if ($hideAiAvatar == 0): ?>
-                                <img src="<?php echo getConditionalStudyValue("aiAvatarURL"); ?>" alt="ResearchChat"
+                                <img src="<?php echo attr(getConditionalStudyValue("aiAvatarURL")); ?>" alt="ResearchChat"
                                     class="avatar <?php echo getStudyValue("aiAvatarRound", 0) == 1 ? "round" : ""; ?>"
                                     <?php echo getConditionalStudyValue("aiAvatarURL") == "" ? "style='display:none;'" : ""; ?>>
                             <?php endif; ?>
                             <div class="user-details">
-                                <span class="username" <?php echo getConditionalStudyValue("aiName") == "" ? "style='display:none;'" : ""; ?>><?php echo getConditionalStudyValue("aiName"); ?></span>
+                                <span class="username" <?php echo getConditionalStudyValue("aiName") == "" ? "style='display:none;'" : ""; ?>><?php echo getConditionalStudyValue("aiName", "", true); ?></span>
                                 <?php
                                 $hideAiStatusMessage = getConditionalStudyValue("aiStatusMessage") == "";
                                 if ($hideAiStatusMessage == 0): ?>
-                                    <span class="status"><?php echo getConditionalStudyValue("aiStatusMessage"); ?></span>
+                                    <span class="status"><?php echo getConditionalStudyValue("aiStatusMessage", "", true); ?></span>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -662,13 +684,13 @@ if ($study['dataCollectionActive'] == 0) {
                     $hideAiDescription = getConditionalStudyValue("aiDescription") == "";
                     if ($hideAiDescription == 0): ?>
                         <div class="title" id="chatTitle">
-                            <span><?php echo getConditionalStudyValue("aiDescription"); ?></span>
+                            <span><?php echo getConditionalStudyValue("aiDescription", "", true); ?></span>
                         </div>
                     <?php endif; ?>
 
                     <div id="message-list">
                         <?php
-                        $firstAiMessageRaw = getConditionalStudyValue("firstAiMessage", "");
+                        $firstAiMessageRaw = getConditionalStudyValue("firstAiMessage", "", true);
                         $hasFirstAiMessage = ($firstAiMessageRaw !== "");
                         ?>
                         <?php if ($hasFirstAiMessage): ?>
@@ -1870,7 +1892,7 @@ if ($study['dataCollectionActive'] == 0) {
                 effectiveMessageText = 'Please describe and analyze this image.';
             }
 
-            var defaultTypingText = "<?php echo getConditionalStudyValue('aiTypingBubbleText', ''); ?>";
+            var defaultTypingText = <?php echo jsString(getConditionalStudyValue('aiTypingBubbleText', '', true)); ?>;
             const $assistantBubble = $('<div class="chat-bubble deleteable"><span class="text">' + defaultTypingText + '</span></div>')
                 .insertBefore("#typing-dots");
             // assign unique id to this assistant message (for reasoning stream)
@@ -3495,7 +3517,7 @@ if ($study['dataCollectionActive'] == 0) {
                         tinymce.get("taskSubmissionTextarea").setContent("");
                     }
 
-                    var redirectURL = "<?php echo getStudyValue("redirectURL", ""); ?>";
+                    var redirectURL = <?php echo jsString(getStudyValue("redirectURL", "")); ?>;
                     if (redirectURL !== "") {
                         // Append all participantID + Condition + all other potentially passed variables
                         redirectURL += "?participantID=" + participantID + "&condition=<?php echo $conditionNumber + 1; ?>&" + variablesString;
