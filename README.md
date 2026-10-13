@@ -4,7 +4,7 @@
 
 ResearchChatAI is a fully customizable chatbot platform that allows researchers to easily set up and conduct studies with AI agents — no coding experience required. Customize every aspect of your agent, collect clean and replicable data, and get up and running in minutes.
 
-ResearchChatAI is hosted at [researchchatai.com](https://researchchatai.com/). The source code provided here can also be installed on local or self-hosted environments.
+ResearchChatAI is hosted at [researchchatai.com](https://researchchatai.com/). The source code provided here can also be installed on local or self-hosted environments. See [HOSTING.md](HOSTING.md) for setup instructions.
 
 ## How It Works
 
