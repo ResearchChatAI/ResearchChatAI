@@ -235,7 +235,7 @@ function processTemplate($template, bool $escapeHtml = false)
         $key = $matches[1]; // Extract the key from the placeholder
         // Replace with the value if it exists in $_GET, or an empty string if not
         $value = isset($getVariables[$key]) && is_string($getVariables[$key]) ? $getVariables[$key] : '';
-        return $escapeHtml ? htmlspecialchars($value, ENT_QUOTES, 'UTF-8') : $value;
+        return $escapeHtml ? htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') : $value;
     }, (string) $template);
 
     return $processedTemplate;
@@ -255,18 +255,20 @@ function getStudyValue(string $key, $default = 0, bool $escapeHtml = false)
 /**
  * Escape a value for use inside an HTML attribute (e.g. placeholder="...").
  * Entities a researcher already typed (like &quot;) are kept as they are.
+ * Invalid UTF-8 becomes U+FFFD instead of emptying the whole value.
  */
 function attr($value): string
 {
-    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8', false);
+    return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false);
 }
 
 /**
  * Encode a value as a JavaScript string literal that is safe inside <script>.
+ * Invalid UTF-8 (e.g. from a badly encoded link) becomes U+FFFD instead of making json_encode fail.
  */
 function jsString($value): string
 {
-    return json_encode((string) $value, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
+    return json_encode((string) $value, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 }
 
 /**
@@ -333,6 +335,41 @@ if ($study['dataCollectionActive'] == 0) {
     header("Location: study-closed.html");
     exit();
 }
+
+// -------------------------------------------------------------------------
+// KEEP THE CHAT ON THE PARTICIPANT'S DEVICE (optional, per study)
+// -------------------------------------------------------------------------
+// With "enableChatPersistence" on, the browser keeps the participant's chat
+// (localStorage), so it is still there after a reload or when the same link is
+// opened again on the same device. Each condition keeps its own chat. Only for
+// links with a participantID; the editor preview (participantID=PREVIEW) and
+// the link wizard's placeholder (participantID=XYZ, shared by everyone who gets
+// such a link) never keep a chat. The records' names (one per condition) and
+// their AES key are derived from the study code and participantID, so the page
+// of another study on this site can neither find nor read them.
+// Without the database column, or with the setting off, nothing below is used.
+$chatStore = null;
+if ((int) getStudyValue("enableChatPersistence", 0) === 1
+    && is_string($participantID)
+    && !in_array($participantID, ['PREVIEW', 'XYZ'], true)
+    && preg_match('/^[A-Za-z0-9_-]{1,64}$/', $participantID) === 1
+) {
+    $chatStoreSeed = "ResearchChatAI chat store v1\n" . $studyCode . "\n" . $participantID;
+    $chatStoreNames = []; // index 0 = condition 1
+    for ($c = 1; $c <= $conditionCount; $c++) {
+        $chatStoreNames[] = 'rcai-chat:' . substr(hash('sha256', "name\n" . $chatStoreSeed . "\n" . $c), 0, 32);
+    }
+    $chatStoreTimerMinutes = (isset($study['timerDuration']) && is_numeric($study['timerDuration'])) ? (float) $study['timerDuration'] : 10;
+    $chatStore = [
+        'names'        => $chatStoreNames,
+        'name'         => $chatStoreNames[$conditionNumber],
+        'key'          => hash('sha256', "key\n" . $chatStoreSeed),
+        'timerSeconds' => $chatStoreTimerMinutes * 60,
+    ];
+}
+// Whether the link itself sets a valid condition (otherwise it was drawn at random above)
+$conditionFromLink = isset($_GET['condition']) && is_string($_GET['condition']) && trim($_GET['condition']) !== ''
+    && $conditionNumber === intval($_GET['condition']) - 1;
 ?>
 
 <!-- =========================================================================
@@ -348,6 +385,38 @@ if ($study['dataCollectionActive'] == 0) {
     <!-- Meta tags and page configuration -->
     <title>ResearchChatAI</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+<?php if ($chatStore !== null && !$conditionFromLink && $conditionCount > 1): ?>
+        <script>
+            // Without a condition in the link, every page load draws a new one. A participant with a
+            // chat kept on this device goes back to the condition they used last instead: the page is
+            // loaded once more with that condition added to the link.
+            (function() {
+                var names = <?php echo json_encode($chatStore['names'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+                var latest = null;
+                for (var i = 0; i < names.length; i++) {
+                    try {
+                        var saved = JSON.parse(window.localStorage.getItem(names[i]) || 'null');
+                        if (saved && saved.v === 1 && saved.c === i + 1 && typeof saved.t === 'number' &&
+                            typeof saved.exp === 'number' && saved.exp >= Date.now() && (!latest || saved.t > latest.t)) {
+                            latest = saved;
+                        }
+                    } catch (e) {
+                        // Storage not available or record unreadable: leave it out
+                    }
+                }
+                if (latest && latest.c !== <?php echo (int) $conditionNumber + 1; ?>) {
+                    try {
+                        // This page is left at once, so the chat code below must not save anything for it
+                        window.__rcaiChatRedirecting = true;
+                        var search = window.location.search;
+                        window.location.replace(window.location.pathname + search + (search ? '&' : '?') + 'condition=' + latest.c + window.location.hash);
+                    } catch (e) {
+                        window.__rcaiChatRedirecting = false;
+                    }
+                }
+            })();
+        </script>
+<?php endif; ?>
     <!--Chat Style-->
     <link rel="stylesheet" href="src/CSS/chat.css?v=2412170846">
     <!--FontAwesome-->
@@ -1524,6 +1593,12 @@ if ($study['dataCollectionActive'] == 0) {
                 nextChunk();
             }
 
+            // A chat restored from this device was seen before: show its first message at once
+            if (window.rcaiChatStore && window.rcaiChatStore.restoring) {
+                showNow();
+                return;
+            }
+
             // If no delay for first message, show immediately
             if (!applyToFirst) {
                 console.log("No delay for first AI message");
@@ -1902,6 +1977,7 @@ if ($study['dataCollectionActive'] == 0) {
             if (!window.__assistantMsgStartTimes) window.__assistantMsgStartTimes = Object.create(null);
             window.__assistantMsgStartTimes[messageId] = (window.performance && performance.now) ? performance.now() : Date.now();
             window.__lastAssistantBubble = $assistantBubble;
+            if (window.rcaiChatStore) window.rcaiChatStore.turnStarted($assistantBubble);
 
             // Show indicators based on the configured text
             if (defaultTypingText.trim() === "<DOTS>") {
@@ -2317,6 +2393,7 @@ if ($study['dataCollectionActive'] == 0) {
                             $('#message-textfield').prop('disabled', false).focus();
                         }
                         $('#typing-dots').hide();
+                        if (window.rcaiChatStore) window.rcaiChatStore.turnDone($assistantBubble);
 
                     } catch (err) {
                         console.error('E2E request failed:', err);
@@ -2805,6 +2882,7 @@ if ($study['dataCollectionActive'] == 0) {
                                         if (!lockedAi && !lockedUser) {
                                             $('#message-textfield').prop('disabled', false).focus();
                                         }
+                                        if (window.rcaiChatStore) window.rcaiChatStore.turnDone($assistantBubble);
 
                                         return;
                                     }
@@ -2992,6 +3070,7 @@ if ($study['dataCollectionActive'] == 0) {
                                     }
 
                                     $('#message-list').scrollTop($('#message-list')[0].scrollHeight);
+                                    if (window.rcaiChatStore) window.rcaiChatStore.turnDone($assistantBubble);
                                 }, delayMs);
                             });
                     })
@@ -3047,6 +3126,7 @@ if ($study['dataCollectionActive'] == 0) {
             $("#message-list .deleteable").each(function(index, message) {
                 message.remove();
             });
+            if (window.rcaiChatStore) window.rcaiChatStore.save();
         });
 
         var imgURL = ''; // Declare imgURL globally
@@ -3510,6 +3590,8 @@ if ($study['dataCollectionActive'] == 0) {
                     encryptionType: submissionEncType
                 }, function(data) {
                     console.log(data);
+                    // The participant is done: the chat kept on this device is no longer needed
+                    if (window.rcaiChatStore) window.rcaiChatStore.forget();
 
                     // Check if taskSubmissionTextarea exists
                     if (tinymce.get("taskSubmissionTextarea") !== null) {
@@ -3768,6 +3850,521 @@ if ($study['dataCollectionActive'] == 0) {
         }
     </script>
 
+<?php if ($chatStore !== null): ?>
+        <!-- ===================================================================
+             KEEP THE CHAT ON THIS DEVICE
+             ===================================================================
+             Only sent for studies with "Keep the chat on the participant's device"
+             switched on. After every finished AI reply the chat is saved in this
+             browser (localStorage, AES-GCM encrypted), one record per condition. On
+             the next page load it is put back, so the AI gets the earlier messages
+             as context again (compileChatHistory() reads them from the page). The
+             messages are saved to the database exactly as before.
+             A record lasts 120 days after the last visit (long enough for
+             longitudinal studies) and is deleted when the participant submits in
+             that condition. When anything is missing or unexpected (no storage, no
+             Web Crypto, a damaged record) the page works as it does without it.
+             =================================================================== -->
+        <script>
+            (function() {
+                'use strict';
+
+                // The page is about to load again with the condition used last (see <head>):
+                // nothing may be saved for the condition drawn for this load
+                if (window.__rcaiChatRedirecting) {
+                    return;
+                }
+
+                var CONFIG = {
+                    name: <?php echo jsString($chatStore['name']); ?>,
+                    keyHex: <?php echo jsString($chatStore['key']); ?>,
+                    studyCode: <?php echo jsString($studyCode); ?>,
+                    participantID: <?php echo jsString($participantID); ?>,
+                    condition: <?php echo (int) $conditionNumber + 1; ?>,
+                    timerSeconds: <?php echo json_encode($chatStore['timerSeconds']); ?>
+                };
+                var VERSION = 1;
+                var KEEP_MS = 120 * 24 * 60 * 60 * 1000; // 120 days after the last change
+                var IMAGE_CHECK_TIMEOUT_MS = 3000;
+                var NAME_PREFIX = 'rcai-chat:';
+                var RESTORE_TIMEOUT_MS = 5000;
+
+                // ---- Can this browser keep the chat? ----
+                var storage = null;
+                try {
+                    // In some embedded frames (third-party storage blocked) merely reading localStorage throws
+                    storage = window.localStorage || null;
+                } catch (e) {
+                    storage = null;
+                }
+                var hasCrypto = !!(window.crypto && window.crypto.subtle && window.crypto.getRandomValues &&
+                    typeof window.Promise === 'function' && typeof window.TextEncoder === 'function' && typeof window.TextDecoder === 'function');
+                // The page has to use the same study and participant as the server did
+                var sameIds = typeof studyCode === 'string' && studyCode === CONFIG.studyCode &&
+                    typeof participantID === 'string' && participantID === CONFIG.participantID;
+                if (!storage || !hasCrypto || !sameIds || typeof $ !== 'function') {
+                    return;
+                }
+
+                // ---- Encryption ----
+                var keyPromise = null;
+
+                function getKey() {
+                    if (!keyPromise) {
+                        var raw = new Uint8Array(32);
+                        for (var i = 0; i < 32; i++) {
+                            raw[i] = parseInt(CONFIG.keyHex.substr(i * 2, 2), 16);
+                        }
+                        keyPromise = window.crypto.subtle.importKey('raw', raw, {
+                            name: 'AES-GCM'
+                        }, false, ['encrypt', 'decrypt']);
+                    }
+                    return keyPromise;
+                }
+
+                function toBase64(bytes) {
+                    var binary = '';
+                    // In chunks: String.fromCharCode cannot take a long chat in one call
+                    for (var i = 0; i < bytes.length; i += 0x8000) {
+                        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+                    }
+                    return window.btoa(binary);
+                }
+
+                function fromBase64(text) {
+                    var binary = window.atob(text);
+                    var bytes = new Uint8Array(binary.length);
+                    for (var i = 0; i < binary.length; i++) {
+                        bytes[i] = binary.charCodeAt(i);
+                    }
+                    return bytes;
+                }
+
+                function seal(content) {
+                    var iv = window.crypto.getRandomValues(new Uint8Array(12));
+                    var plain = new TextEncoder().encode(JSON.stringify(content));
+                    return getKey().then(function(key) {
+                        return window.crypto.subtle.encrypt({
+                            name: 'AES-GCM',
+                            iv: iv
+                        }, key, plain);
+                    }).then(function(cipher) {
+                        return {
+                            v: VERSION,
+                            c: CONFIG.condition,
+                            t: Date.now(), // When this condition was used last (see <head>)
+                            exp: Date.now() + KEEP_MS,
+                            iv: toBase64(iv),
+                            ct: toBase64(new Uint8Array(cipher))
+                        };
+                    });
+                }
+
+                function unseal(record) {
+                    return getKey().then(function(key) {
+                        return window.crypto.subtle.decrypt({
+                            name: 'AES-GCM',
+                            iv: fromBase64(record.iv)
+                        }, key, fromBase64(record.ct));
+                    }).then(function(plain) {
+                        return JSON.parse(new TextDecoder().decode(plain));
+                    });
+                }
+
+                // ---- The saved record ----
+                function readRecord() {
+                    var raw;
+                    try {
+                        raw = storage.getItem(CONFIG.name);
+                    } catch (e) {
+                        return {
+                            state: 'none'
+                        };
+                    }
+                    if (raw === null) {
+                        return {
+                            state: 'none'
+                        };
+                    }
+                    var record = null;
+                    try {
+                        record = JSON.parse(raw);
+                    } catch (e) {
+                        record = null;
+                    }
+                    // Every condition has its own record, so a record of another condition here is damaged
+                    if (!record || record.v !== VERSION || record.c !== CONFIG.condition || typeof record.exp !== 'number' ||
+                        typeof record.iv !== 'string' || typeof record.ct !== 'string') {
+                        return {
+                            state: 'invalid'
+                        };
+                    }
+                    if (record.exp < Date.now()) {
+                        return {
+                            state: 'expired'
+                        };
+                    }
+                    return {
+                        state: 'found',
+                        record: record
+                    };
+                }
+
+                function writeRecord(record) {
+                    var text = JSON.stringify(record);
+                    try {
+                        storage.setItem(CONFIG.name, text);
+                        return;
+                    } catch (e) {
+                        // Storage full: remove expired chats and try once more
+                        removeExpiredRecords();
+                    }
+                    try {
+                        storage.setItem(CONFIG.name, text);
+                    } catch (e) {
+                        console.warn('[chat store] The chat could not be saved on this device:', e);
+                    }
+                }
+
+                function deleteRecord() {
+                    try {
+                        storage.removeItem(CONFIG.name);
+                    } catch (e) {
+                        // Nothing else to do
+                    }
+                }
+
+                // Chats of any study on this site whose time is up are not needed any more
+                function removeExpiredRecords() {
+                    try {
+                        var names = [];
+                        for (var i = 0; i < storage.length && i < 2000; i++) {
+                            var name = storage.key(i);
+                            if (name && name.indexOf(NAME_PREFIX) === 0 && name !== CONFIG.name) {
+                                names.push(name);
+                            }
+                        }
+                        var now = Date.now();
+                        names.forEach(function(name) {
+                            try {
+                                var record = JSON.parse(storage.getItem(name));
+                                if (record && typeof record.exp === 'number' && record.exp < now) {
+                                    storage.removeItem(name);
+                                }
+                            } catch (e) {
+                                // Leave a record that cannot be read alone
+                            }
+                        });
+                    } catch (e) {
+                        // Storage not readable: nothing to clean up
+                    }
+                }
+
+                // ---- Reading the chat from the page ----
+                function isImageUrl(value) {
+                    return typeof value === 'string' && value.length <= 2048 && /^https?:\/\//i.test(value);
+                }
+
+                // The bubbles compileChatHistory() reads, leaving out replies that are still on
+                // their way or failed (still marked as pending) and bubbles that were never shown
+                function snapshot() {
+                    var bubbles = [];
+                    $('#message-list').children('.chat-bubble.deleteable').each(function() {
+                        var $bubble = $(this);
+                        if ($bubble.attr('data-rcai-pending') === '1' || this.style.display === 'none') return;
+                        if ($bubble.hasClass('own')) {
+                            if ($bubble.hasClass('image-thumbnail')) {
+                                var src = $bubble.find('img').first().attr('src');
+                                if (isImageUrl(src)) {
+                                    bubbles.push({
+                                        t: 'i',
+                                        src: src
+                                    });
+                                }
+                            } else {
+                                bubbles.push({
+                                    t: 'u',
+                                    x: $bubble.children('.text').first().text()
+                                });
+                            }
+                            return;
+                        }
+                        var item = {
+                            t: 'a',
+                            h: $bubble.children('.text').first().html() || ''
+                        };
+                        var $reasoning = $bubble.children('.reasoning-container').first();
+                        if ($reasoning.length) {
+                            item.r = {
+                                title: $reasoning.find('.reasoning-title').first().text(),
+                                h: $reasoning.find('.reasoning-content').first().html() || ''
+                            };
+                        }
+                        bubbles.push(item);
+                    });
+                    return {
+                        c: CONFIG.condition,
+                        startedAt: startTime.getTime(),
+                        msgs: numberMessages,
+                        user: userMessageCount,
+                        ai: aiMessageCount,
+                        bubbles: bubbles
+                    };
+                }
+
+                // ---- Putting a saved chat back ----
+                function buildReasoning(saved) {
+                    var isOpen = !!window.REASONING_DEFAULT_OPEN;
+                    var $container = $('<div class="reasoning-container"><div class="reasoning-toggle"><span class="reasoning-title"></span><span class="chevron fas"></span></div><div class="reasoning-content"></div></div>');
+                    var $content = $container.find('.reasoning-content');
+                    var $chevron = $container.find('.chevron');
+                    $container.find('.reasoning-title').text(saved.title);
+                    $content.html(saved.h).css('display', isOpen ? 'block' : 'none');
+                    $container.toggleClass('open', isOpen);
+                    $chevron.addClass(isOpen ? 'fa-chevron-down' : 'fa-chevron-right');
+                    // Same behaviour as the toggle built in ensureReasoningContainer()
+                    $container.find('.reasoning-toggle').on('click', function() {
+                        var open = $container.hasClass('open');
+                        $container.toggleClass('open', !open);
+                        if (open) {
+                            $content.hide();
+                        } else {
+                            $content.show();
+                        }
+                        $chevron.toggleClass('fa-chevron-right', open).toggleClass('fa-chevron-down', !open);
+                    });
+                    return $container;
+                }
+
+                // Same markup as the bubbles the chat creates, without data-msg-id (those numbers
+                // start again at 1 on every page load and must not point at a restored bubble)
+                function buildBubble(item) {
+                    var $bubble;
+                    if (item.t === 'u') {
+                        $bubble = $('<div class="chat-bubble own deleteable"><span class="text"></span></div>');
+                        $bubble.children('.text').text(item.x);
+                    } else if (item.t === 'i') {
+                        var src = item.src;
+                        var $image = $('<img alt="Image" style="max-width: 100px; max-height: 100px; margin-bottom: 5px; cursor: pointer;" />').attr('src', src);
+                        $image.on('click', function() {
+                            openLightbox(src);
+                        });
+                        $bubble = $('<div class="chat-bubble own deleteable image-thumbnail"></div>').append($image);
+                    } else {
+                        $bubble = $('<div class="chat-bubble deleteable"><span class="text"></span></div>');
+                        $bubble.children('.text').html(item.h);
+                        if (item.r && window.REASONING_VISIBLE) {
+                            $bubble.append(buildReasoning(item.r)).addClass('with-reasoning');
+                        }
+                    }
+                    return $bubble.attr('data-rcai-restored', '1');
+                }
+
+                function isCount(value) {
+                    return typeof value === 'number' && value >= 0 && value % 1 === 0 && value <= 1000000;
+                }
+
+                function isValidContent(content) {
+                    if (!content || typeof content !== 'object' || content.c !== CONFIG.condition) return false;
+                    if (!isCount(content.msgs) || !isCount(content.user) || !isCount(content.ai)) return false;
+                    if (typeof content.startedAt !== 'number' || !isFinite(content.startedAt) || content.startedAt <= 0) return false;
+                    if (!Array.isArray(content.bubbles) || content.bubbles.length > 20000) return false;
+                    return content.bubbles.every(function(item) {
+                        if (!item || typeof item !== 'object') return false;
+                        if (item.t === 'u') return typeof item.x === 'string';
+                        if (item.t === 'i') return isImageUrl(item.src);
+                        if (item.t === 'a') {
+                            return typeof item.h === 'string' &&
+                                (item.r === undefined || (!!item.r && typeof item.r.title === 'string' && typeof item.r.h === 'string'));
+                        }
+                        return false;
+                    });
+                }
+
+                function applySavedState(content) {
+                    aiMessageCount = content.ai;
+                    userMessageCount = content.user;
+                    numberMessages = content.msgs;
+                    // The visit started with the first page load: submission start time, duration and timer
+                    startTime = new Date(Math.min(content.startedAt, Date.now()));
+                    try {
+                        if (typeof countdownTime === 'number' && typeof updateTimerDisplay === 'function' && typeof CONFIG.timerSeconds === 'number') {
+                            var elapsed = Math.max(0, Math.floor((Date.now() - startTime.getTime()) / 1000));
+                            // At least one second, so the next tick runs the usual "time is up" steps
+                            var remaining = Math.max(1, Math.round(CONFIG.timerSeconds - elapsed));
+                            if (remaining < countdownTime) {
+                                countdownTime = remaining;
+                                updateTimerDisplay(countdownTime);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[chat store] The timer could not be continued:', e);
+                    }
+                }
+
+                // A restored image whose file is gone from the server (deleted by the researcher or by a
+                // clean-up of old uploads) would make every later AI request fail, because the conversation
+                // sent to the AI includes the image link. Such image bubbles are left out. An image that
+                // merely cannot be checked right now (e.g. offline) is kept.
+                function removeMissingImages() {
+                    var images = $('#message-list .image-thumbnail[data-rcai-restored="1"] img').get();
+                    if (!images.length || typeof window.fetch !== 'function') return Promise.resolve(0);
+                    var checks = images.map(function(img) {
+                        return window.fetch(img.getAttribute('src'), {
+                            method: 'HEAD',
+                            cache: 'no-store'
+                        }).then(function(response) {
+                            return response.status === 404 || response.status === 410 ? img : null;
+                        }, function() {
+                            return null;
+                        });
+                    });
+                    var timeout = new Promise(function(resolve) {
+                        setTimeout(function() {
+                            resolve([]);
+                        }, IMAGE_CHECK_TIMEOUT_MS);
+                    });
+                    return Promise.race([Promise.all(checks), timeout]).then(function(missing) {
+                        var removed = 0;
+                        missing.forEach(function(img) {
+                            if (img) {
+                                $(img).closest('.chat-bubble').remove();
+                                removed++;
+                            }
+                        });
+                        return removed;
+                    });
+                }
+
+                function restore(record) {
+                    var finished = false;
+                    var savesAtStart = saveCount;
+                    var safety = setTimeout(finish, RESTORE_TIMEOUT_MS);
+
+                    function finish() {
+                        if (finished) return;
+                        finished = true;
+                        clearTimeout(safety);
+                        api.restoring = false;
+                        var lockedAi = maybeLockIfLimitReached();
+                        var lockedUser = maybeLockIfUserLimitReached();
+                        if (!lockedAi && !lockedUser) {
+                            $('#message-textfield').prop('disabled', false);
+                        }
+                    }
+
+                    unseal(record).then(function(content) {
+                        if (finished) return; // Took too long: the participant has already started anew
+                        if (saveCount !== savesAtStart) { // The chat was reset in the meantime
+                            finish();
+                            return;
+                        }
+                        if (!isValidContent(content)) {
+                            throw new Error('The saved chat has an unexpected format');
+                        }
+                        // Build every bubble first, so the page only changes once all of them worked
+                        var fragment = document.createDocumentFragment();
+                        content.bubbles.forEach(function(item) {
+                            fragment.appendChild(buildBubble(item)[0]);
+                        });
+                        var anchor = document.getElementById('typing-dots');
+                        anchor.parentNode.insertBefore(fragment, anchor);
+                        applySavedState(content);
+                        $('#message-list').scrollTop($('#message-list')[0].scrollHeight);
+                        // Typing stays blocked until images whose file is gone are taken out. Saving again
+                        // records this visit (condition used last, 120 days from now) and drops those images
+                        return removeMissingImages().then(function() {
+                            save();
+                            finish();
+                        });
+                    }).catch(function(e) {
+                        if (finished) return;
+                        console.warn('[chat store] The saved chat could not be restored, a new one starts:', e);
+                        deleteRecord();
+                        finish();
+                        save();
+                    });
+                }
+
+                // ---- Saving ----
+                var pending = Promise.resolve();
+                var saveCount = 0; // Counts saves and deletes: a save overtaken by a newer one is skipped
+
+                function save() {
+                    var content;
+                    try {
+                        content = snapshot();
+                    } catch (e) {
+                        console.warn('[chat store] The chat could not be read for saving:', e);
+                        return;
+                    }
+                    var mine = ++saveCount;
+                    pending = pending.then(function() {
+                        if (mine !== saveCount) return null;
+                        return seal(content).then(function(record) {
+                            if (mine === saveCount) {
+                                writeRecord(record);
+                            }
+                        });
+                    }).catch(function(e) {
+                        console.warn('[chat store] The chat could not be saved on this device:', e);
+                    });
+                }
+
+                function forget() {
+                    saveCount++; // Saves still on their way are dropped
+                    deleteRecord();
+                }
+
+                // ---- Used by the chat code above ----
+                var api = {
+                    restoring: false,
+                    // A new AI reply is on its way: leave its bubble out of the saved chat until it is finished
+                    turnStarted: function($bubble) {
+                        try {
+                            $bubble.attr('data-rcai-pending', '1');
+                        } catch (e) {
+                            // Nothing else to do
+                        }
+                    },
+                    // The reply is complete (participant message and answer): save the chat
+                    turnDone: function($bubble) {
+                        try {
+                            if ($bubble) $bubble.removeAttr('data-rcai-pending');
+                        } catch (e) {
+                            // Nothing else to do
+                        }
+                        save();
+                    },
+                    save: save,
+                    forget: forget
+                };
+                window.rcaiChatStore = api;
+
+                var found = readRecord();
+                if (found.state === 'found') {
+                    // Nothing can be typed until the saved chat is back (a few milliseconds)
+                    api.restoring = true;
+                    $('#message-textfield').prop('disabled', true);
+                }
+
+                $(function() {
+                    removeExpiredRecords();
+                    if (found.state === 'found') {
+                        restore(found.record);
+                    } else {
+                        // First visit in this condition (or nothing usable saved): start the record now, so
+                        // the condition and the start time are kept even if the page is reloaded before the
+                        // first message. The chats of the other conditions are not touched.
+                        if (found.state !== 'none') {
+                            deleteRecord();
+                        }
+                        save();
+                    }
+                });
+            })();
+        </script>
+<?php endif; ?>
 </body>
 
 </html>

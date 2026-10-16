@@ -1965,7 +1965,7 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
 
     <hr>
 
-    <!--Chat settings (disableCopyPasteChat, disableDelteChatButton, enableImageUpload, enableFileUpload) START-->
+    <!--Chat settings (disableCopyPasteChat, disableDelteChatButton, enableChatPersistence, enableImageUpload, enableFileUpload) START-->
     <div class="container" style="max-width: 760px;">
       <section class="section">
         <h4 class="title is-3" id="chatSettingsTitle">
@@ -2036,6 +2036,37 @@ $safeBaseURL = htmlspecialchars($baseURL, ENT_QUOTES, 'UTF-8');
             </div>
           </div>
         </div>
+        <?php if (array_key_exists('enableChatPersistence', $study)): ?>
+          <div class="field mt-5">
+            <label class="checkbox">
+              <input type="checkbox" class="trackChanges mbToggle" fieldKey="enableChatPersistence" saveIndicatorElement="#chatSettingsTitle" <?php echo ($study["enableChatPersistence"] == 1) ? "checked" : ""; ?> />
+              Keep the chat on the participant's device
+              <button class="mbHelpButton" mbHelpTarget="#chatPersistenceHelp"><i class="fa fa-question"></i></button>
+            </label>
+            <div class="mbHelpBox notification is-info is-light mt-3" id="chatPersistenceHelp" style="display: none;">
+              <div class="columns">
+                <div class="column colWithIcon">
+                  <span class="icon">
+                    <i class="fa fa-question"></i>
+                  </span>
+                </div>
+                <div class="column">
+                  <p>
+                    <b>Help:</b> When this is on, each participant's chat is kept in their browser. It is still there when they reload the page or open the same link again later, on the same device and in the same browser (not on another device or browser). This only works when the link contains a participantID (not the placeholder XYZ); the preview never keeps a chat.
+                    <br><br>
+                    <b>Conditions:</b> Each experimental condition keeps its own chat. A link with a condition opens the chat of that condition; a link without a condition takes the participant back to the condition they used last, instead of drawing a new one. The timer as well as the start time, duration and number of messages of the submission continue from the first visit of that condition.
+                    <br><br>
+                    <b>Deleting:</b> Submitting deletes the kept chat of that condition; otherwise it is deleted 120 days after the participant's last visit. The "chat delete"-button empties it. The chat is stored encrypted, and only this study's page for the same participantID can read it. Messages are saved to the database exactly as before.
+                    <br><br>
+                    <b>Shared computers:</b> In a lab, give every participant their own participantID, otherwise the next participant sees the previous chat.
+                    <br><br>
+                    <b>Limits:</b> Private browser windows keep the chat only until they are closed, and so do Safari and all browsers on iPhones and iPads when the study is embedded in a survey. Safari (also on iPhones and iPads) deletes a website's saved data after 7 days of use without a visit to that website, so after a longer break the chat may be gone there. Uploaded images that were deleted in the meantime are left out of a kept chat.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        <?php endif; ?>
 
         <div class="field mt-5">
           <label class="label has-text-left" id="maxNumberAiMessagesLabel">
